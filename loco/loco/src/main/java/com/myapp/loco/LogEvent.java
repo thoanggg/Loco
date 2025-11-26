@@ -2,13 +2,17 @@ package com.myapp.loco;
 
 import javafx.beans.property.SimpleStringProperty;
 
+/**
+ * Lớp (Model) đại diện cho một sự kiện log
+ * Được sử dụng để hiển thị trong TableView.
+ */
 public class LogEvent {
     private final SimpleStringProperty eventId;
     private final SimpleStringProperty timeCreated;
     private final SimpleStringProperty providerName;
     private final SimpleStringProperty level;
-    private final SimpleStringProperty description;
-    private final String fullDetails;
+    private final SimpleStringProperty description; // Dòng tóm tắt
+    private final String fullDetails; // Toàn bộ chi tiết
 
     public LogEvent(String eventId, String timeCreated, String providerName, String level, String description, String fullDetails) {
         this.eventId = new SimpleStringProperty(eventId);
@@ -19,7 +23,7 @@ public class LogEvent {
         this.fullDetails = fullDetails;
     }
 
-    //Getters
+    // --- Getters (bắt buộc phải có để PropertyValueFactory hoạt động) ---
 
     public String getEventId() {
         return eventId.get();
@@ -61,8 +65,8 @@ public class LogEvent {
         return description;
     }
 
+    // Getter cho fullDetails (dùng cho cửa sổ pop-up)
     public String getFullDetails() {
         return fullDetails;
     }
 }
-
