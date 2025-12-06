@@ -2,71 +2,48 @@ package com.myapp.loco;
 
 import javafx.beans.property.SimpleStringProperty;
 
-/**
- * Lớp (Model) đại diện cho một sự kiện log
- * Được sử dụng để hiển thị trong TableView.
- */
 public class LogEvent {
     private final SimpleStringProperty eventId;
     private final SimpleStringProperty timeCreated;
     private final SimpleStringProperty providerName;
     private final SimpleStringProperty level;
-    private final SimpleStringProperty description; // Dòng tóm tắt
-    private final String fullDetails; // Toàn bộ chi tiết
+    private final SimpleStringProperty description;
+    private final SimpleStringProperty user;
+    private final SimpleStringProperty host; // THÊM MỚI
+    private final String fullDetails;
 
-    public LogEvent(String eventId, String timeCreated, String providerName, String level, String description, String fullDetails) {
+    public LogEvent(String eventId, String timeCreated, String providerName, String level, String description, String user, String host, String fullDetails) {
         this.eventId = new SimpleStringProperty(eventId);
         this.timeCreated = new SimpleStringProperty(timeCreated);
         this.providerName = new SimpleStringProperty(providerName);
         this.level = new SimpleStringProperty(level);
         this.description = new SimpleStringProperty(description);
+        this.user = new SimpleStringProperty(user);
+        this.host = new SimpleStringProperty(host); // Init
         this.fullDetails = fullDetails;
     }
 
-    // --- Getters (bắt buộc phải có để PropertyValueFactory hoạt động) ---
+    public String getEventId() { return eventId.get(); }
+    public SimpleStringProperty eventIdProperty() { return eventId; }
 
-    public String getEventId() {
-        return eventId.get();
-    }
+    public String getTimeCreated() { return timeCreated.get(); }
+    public SimpleStringProperty timeCreatedProperty() { return timeCreated; }
 
-    public SimpleStringProperty eventIdProperty() {
-        return eventId;
-    }
+    public String getProviderName() { return providerName.get(); }
+    public SimpleStringProperty providerNameProperty() { return providerName; }
 
-    public String getTimeCreated() {
-        return timeCreated.get();
-    }
+    public String getLevel() { return level.get(); }
+    public SimpleStringProperty levelProperty() { return level; }
 
-    public SimpleStringProperty timeCreatedProperty() {
-        return timeCreated;
-    }
+    public String getDescription() { return description.get(); }
+    public SimpleStringProperty descriptionProperty() { return description; }
 
-    public String getProviderName() {
-        return providerName.get();
-    }
+    public String getUser() { return user.get(); }
+    public SimpleStringProperty userProperty() { return user; }
 
-    public SimpleStringProperty providerNameProperty() {
-        return providerName;
-    }
+    // Getter cho Host
+    public String getHost() { return host.get(); }
+    public SimpleStringProperty hostProperty() { return host; }
 
-    public String getLevel() {
-        return level.get();
-    }
-
-    public SimpleStringProperty levelProperty() {
-        return level;
-    }
-
-    public String getDescription() {
-        return description.get();
-    }
-
-    public SimpleStringProperty descriptionProperty() {
-        return description;
-    }
-
-    // Getter cho fullDetails (dùng cho cửa sổ pop-up)
-    public String getFullDetails() {
-        return fullDetails;
-    }
+    public String getFullDetails() { return fullDetails; }
 }

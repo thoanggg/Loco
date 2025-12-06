@@ -2,15 +2,19 @@ package com.myapp.loco;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import javafx.animation.KeyFrame;
+import javafx.animation.PauseTransition;
 import javafx.animation.Timeline;
 import javafx.application.Platform;
+import javafx.beans.property.SimpleObjectProperty;
 import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
 import javafx.concurrent.Task;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 import org.w3c.dom.Document;
@@ -23,381 +27,210 @@ import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.io.PrintWriter;
 import java.io.StringReader;
+import java.io.StringWriter;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
 public class MainController {
 
-    // --- FXML Control Fields ---
-    @FXML private ToggleGroup modeToggleGroup;
-    @FXML private RadioButton localModeRadio;
-    @FXML private RadioButton remoteModeRadio;
-    @FXML private TextField remoteHostField;
-    @FXML private ComboBox<String> logChannelComboBox;
-    @FXML private Spinner<Integer> eventCountSpinner;
-    @FXML private TextField xpathQueryField;
-    @FXML private Button getLogsButton;
-    @FXML private ToggleButton autoRefreshToggle;
-    @FXML private ProgressIndicator loadingIndicator;
+    @FXML private Button btnDashboard; @FXML private Button btnLogExplorer; @FXML private VBox dashboardView; @FXML private VBox logExplorerView;
+    @FXML private Label lblActiveAgents; @FXML private TextField agentIpField; @FXML private Label scanStatusLabel;
+    @FXML private TableView<Agent> agentTableView;
+    @FXML private TableColumn<Agent, String> colAgentName; @FXML private TableColumn<Agent, String> colAgentIp; @FXML private TableColumn<Agent, String> colAgentUser;
+    @FXML private TableColumn<Agent, String> colAgentStatus; @FXML private TableColumn<Agent, String> colAgentLastSeen; @FXML private TableColumn<Agent, Button> colAgentAction;
+    @FXML private TextField currentTargetField; @FXML private ComboBox<String> logChannelComboBox; @FXML private Spinner<Integer> eventCountSpinner;
+    @FXML private TextField xpathQueryField; @FXML private Button getLogsButton; @FXML private ToggleButton autoRefreshToggle; @FXML private ProgressIndicator loadingIndicator;
     @FXML private TableView<LogEvent> logTableView;
-    @FXML private TableColumn<LogEvent, String> eventIdColumn;
-    @FXML private TableColumn<LogEvent, String> timeColumn;
-    @FXML private TableColumn<LogEvent, String> providerColumn;
-    @FXML private TableColumn<LogEvent, String> levelColumn;
-    @FXML private TableColumn<LogEvent, String> descriptionColumn;
+    @FXML private TableColumn<LogEvent, String> eventIdColumn; @FXML private TableColumn<LogEvent, String> timeColumn; @FXML private TableColumn<LogEvent, String> providerColumn;
+    @FXML private TableColumn<LogEvent, String> levelColumn; @FXML private TableColumn<LogEvent, String> descriptionColumn;
+    @FXML private TableColumn<LogEvent, String> userColumn; @FXML private TableColumn<LogEvent, String> hostColumn; // THÊM CỘT HOST
 
-    // --- Class Fields ---
-    private Timeline autoRefreshTimeline;
-    private final DocumentBuilderFactory xmlFactory = DocumentBuilderFactory.newInstance();
-    // Khởi tạo HttpClient và ObjectMapper một lần để tái sử dụng
-    private final HttpClient httpClient = HttpClient.newBuilder()
-            .version(HttpClient.Version.HTTP_1_1)
-            .build();
+    private final ObservableList<Agent> agentList = FXCollections.observableArrayList();
+    private Timeline autoRefreshTimeline; private Timeline agentHealthCheckTimeline;
+    private final HttpClient httpClient = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).connectTimeout(java.time.Duration.ofSeconds(2)).build();
     private final ObjectMapper jsonMapper = new ObjectMapper();
+    private final DocumentBuilderFactory xmlFactory = DocumentBuilderFactory.newInstance();
+    private final NetworkScanner networkScanner = new NetworkScanner();
 
-    @FXML
-    public void initialize() {
-        // Cấu hình ComboBox
-        logChannelComboBox.setItems(FXCollections.observableArrayList(
-                "Application",
-                "Security",
-                "System",
-                "Microsoft-Windows-Sysmon/Operational"
-        ));
-        logChannelComboBox.setValue("Application");
-
-        // Cấu hình TableView Columns
-        eventIdColumn.setCellValueFactory(new PropertyValueFactory<>("eventId"));
-        timeColumn.setCellValueFactory(new PropertyValueFactory<>("timeCreated"));
-        providerColumn.setCellValueFactory(new PropertyValueFactory<>("providerName"));
-        levelColumn.setCellValueFactory(new PropertyValueFactory<>("level"));
-        descriptionColumn.setCellValueFactory(new PropertyValueFactory<>("description"));
-
-        // Sửa lỗi: Cài đặt co dãn cột bằng code Java (thay vì FXML)
-        logTableView.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
-
-        // Xử lý Double-click trên hàng của TableView
-        logTableView.setRowFactory(tv -> {
-            TableRow<LogEvent> row = new TableRow<>();
-            row.setOnMouseClicked(event -> {
-                if (event.getClickCount() == 2 && (!row.isEmpty())) {
-                    LogEvent rowData = row.getItem();
-                    showLogDetails(rowData);
-                }
-            });
-            return row;
-        });
-
-        // Cấu hình Auto-Refresh
-        autoRefreshTimeline = new Timeline(new KeyFrame(Duration.seconds(10), e -> handleGetLogs()));
-        autoRefreshTimeline.setCycleCount(Timeline.INDEFINITE);
-
-        autoRefreshToggle.selectedProperty().addListener((obs, oldVal, newVal) -> {
-            setControlsDisabled(newVal); // Tắt/bật các nút
-            if (newVal) {
-                autoRefreshTimeline.play();
-            } else {
-                autoRefreshTimeline.stop();
-            }
-        });
-
-        // Cấu hình chuyển đổi Mode Local/Remote
-        modeToggleGroup.selectedToggleProperty().addListener((obs, oldToggle, newToggle) -> {
-            if (newToggle == remoteModeRadio) {
-                remoteHostField.setDisable(false);
-            } else {
-                remoteHostField.setDisable(true);
-            }
-        });
+    @FXML public void initialize() {
+        setupDashboard(); setupLogExplorer();
+        addAgentIfNotExists("127.0.0.1", "Online"); updateActiveAgentsCount();
+        agentHealthCheckTimeline = new Timeline(new KeyFrame(Duration.seconds(15), e -> checkAllAgentsHealth()));
+        agentHealthCheckTimeline.setCycleCount(Timeline.INDEFINITE); agentHealthCheckTimeline.play();
+        PauseTransition pause = new PauseTransition(Duration.seconds(1)); pause.setOnFinished(event -> handleScanNetwork()); pause.play();
     }
 
-    /**
-     * Tắt/bật các điều khiển khi đang auto-refresh hoặc đang tải
-     */
-    private void setControlsDisabled(boolean isDisabled) {
-        getLogsButton.setDisable(isDisabled);
-        logChannelComboBox.setDisable(isDisabled);
-        eventCountSpinner.setDisable(isDisabled);
-        xpathQueryField.setDisable(isDisabled);
-        // Vô hiệu hóa trường host nếu đang ở local mode HOẶC nếu auto-refresh đang bật
-        remoteHostField.setDisable(isDisabled || localModeRadio.isSelected());
-        localModeRadio.setDisable(isDisabled);
-        remoteModeRadio.setDisable(isDisabled);
+    // --- LOGIC HEALTH CHECK (DASHBOARD) ---
+    private void checkSingleAgentHealth(Agent agent) {
+        String ip = agent.getIp();
+        if ("localhost".equals(ip) || "127.0.0.1".equals(ip)) return;
+
+        HttpRequest req = HttpRequest.newBuilder().uri(URI.create("http://" + ip + ":9876/ping")).GET().build();
+        httpClient.sendAsync(req, HttpResponse.BodyHandlers.ofString())
+                .thenAccept(res -> Platform.runLater(() -> {
+                    if (res.statusCode() == 200) {
+                        String body = res.body();
+                        if (body.startsWith("pong")) {
+                            agent.setStatus("Online");
+                            // Format mới từ Agent: pong | DOMAIN\User | Hostname
+                            String[] parts = body.split("\\|");
+
+                            if (parts.length > 1) {
+                                String userRaw = parts[1].trim();
+                                // Tách DOMAIN\User cho Dashboard
+                                if (userRaw.contains("\\")) {
+                                    String[] up = userRaw.split("\\\\");
+                                    agent.setUser(up[1]); // Lấy User (vuduc)
+                                    // Phần up[0] (DESKTOP-XXX) chính là Hostname
+                                    agent.setName(up[0]);
+                                } else {
+                                    agent.setUser(userRaw);
+                                }
+                            }
+                            // Nếu có phần Hostname riêng ở part 2 (fallback)
+                            if (parts.length > 2 && agent.getName().equals("Checking...")) {
+                                agent.setName(parts[2].trim());
+                            }
+
+                            agent.lastSeenProperty().set(LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss")));
+                        }
+                    } else { agent.setStatus("Error"); }
+                    agentTableView.refresh(); updateActiveAgentsCount();
+                })).exceptionally(ex -> { Platform.runLater(() -> { agent.setStatus("Offline"); agentTableView.refresh(); updateActiveAgentsCount(); }); return null; });
     }
 
-    @FXML
-    private void handleGetLogs() {
-        String logChannel = logChannelComboBox.getValue();
-        int eventCount = eventCountSpinner.getValue();
-        String xpathQuery = xpathQueryField.getText();
+    private void checkAllAgentsHealth() { for (Agent agent : agentList) checkSingleAgentHealth(agent); }
 
-        // Tạo một đối tượng Request (POJO)
-        LogRequest logRequest = new LogRequest();
-        logRequest.setLogChannel(logChannel);
-        logRequest.setEventCount(eventCount);
-        logRequest.setXpathQuery(xpathQuery);
-
-        // Tạo Task (luồng nền)
-        Task<List<LogEvent>> task;
-        if (remoteModeRadio.isSelected()) {
-            String host = remoteHostField.getText();
-            task = createRemoteTask(logRequest, host); // Lấy log từ xa
-        } else {
-            task = createLocalTask(logRequest); // Lấy log nội bộ
-        }
-
-        // Xử lý khi Task thành công
-        task.setOnSucceeded(e -> {
-            logTableView.setItems(FXCollections.observableArrayList(task.getValue()));
-            loadingIndicator.setVisible(false);
-        });
-
-        // Xử lý khi Task thất bại
-        task.setOnFailed(e -> {
-            loadingIndicator.setVisible(false);
-            showError("Lỗi Lấy Logs", "Không thể lấy dữ liệu.", task.getException());
-        });
-
-        // Chạy Task
-        loadingIndicator.setVisible(true);
-        new Thread(task).start();
-    }
-
-    /**
-     * Tạo Task để chạy wevtutil nội bộ (Local Mode)
-     */
-    private Task<List<LogEvent>> createLocalTask(LogRequest request) {
-        return new Task<>() {
-            @Override
-            protected List<LogEvent> call() throws Exception {
-                List<String> command = new ArrayList<>();
-                command.add("wevtutil");
-                command.add("qe"); // query-events
-                command.add(request.getLogChannel());
-                command.add("/c:" + request.getEventCount());
-                command.add("/rd:true"); // reverse direction
-                command.add("/f:xml"); // format
-
-                // Thêm lọc XPath nếu có
-                if (request.getXpathQuery() != null && !request.getXpathQuery().trim().isEmpty()) {
-                    command.add("/q:" + request.getXpathQuery());
-                }
-
-                ProcessBuilder pb = new ProcessBuilder(command);
-                pb.redirectErrorStream(true);
-                Process process = pb.start();
-
-                StringBuilder xmlOutput = new StringBuilder();
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        xmlOutput.append(line).append(System.lineSeparator());
-                    }
-                }
-
-                int exitCode = process.waitFor();
-                if (exitCode != 0) {
-                    throw new RuntimeException("wevtutil exited with code: " + exitCode + "\nOutput: " + xmlOutput);
-                }
-
-                return parseLogEvents(xmlOutput.toString());
-            }
-        };
-    }
-
-    /**
-     * Tạo Task để gửi yêu cầu đến Agent từ xa (Remote Mode)
-     */
-    private Task<List<LogEvent>> createRemoteTask(LogRequest request, String hostUrl) {
-        return new Task<>() {
-            @Override
-            protected List<LogEvent> call() throws Exception {
-                if (hostUrl == null || hostUrl.trim().isEmpty() || !hostUrl.startsWith("http")) {
-                    throw new IllegalArgumentException("Host URL của Agent không hợp lệ. Phải bắt đầu bằng http:// hoặc https://");
-                }
-
-                // 1. Chuyển request object thành JSON
-                String jsonBody = jsonMapper.writeValueAsString(request);
-
-                // 2. Tạo HTTP Request
-                HttpRequest httpRequest = HttpRequest.newBuilder()
-                        .uri(URI.create(hostUrl + "/get-logs")) // Endpoint là /get-logs
-                        .header("Content-Type", "application/json")
-                        .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
-                        .build();
-
-                // 3. Gửi request và nhận response
-                // Lưu ý: httpClient đã được khởi tạo 1 lần
-                HttpResponse<String> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
-
-                // 4. Xử lý response
-                if (response.statusCode() != 200) {
-                    throw new RuntimeException("Agent trả về lỗi (Code: " + response.statusCode() + "): " + response.body());
-                }
-
-                // Agent trả về XML, chúng ta phân tích nó
-                String xmlOutput = response.body();
-                return parseLogEvents(xmlOutput);
-            }
-        };
-    }
-
-
-    /**
-     * Phân tích chuỗi XML thành danh sách các LogEvent
-     * Dùng chung cho cả Local và Remote
-     */
+    // --- LOGIC PARSING LOG (LOG EXPLORER) ---
     private List<LogEvent> parseLogEvents(String xmlOutput) throws Exception {
         List<LogEvent> events = new ArrayList<>();
-        // Bao bọc output trong một thẻ root để đảm bảo XML hợp lệ
+        if (xmlOutput == null || xmlOutput.trim().isEmpty()) return events;
         String validXml = "<Events>" + xmlOutput + "</Events>";
-
-        DocumentBuilder builder = xmlFactory.newDocumentBuilder();
-        InputSource is = new InputSource(new StringReader(validXml));
-        Document doc = builder.parse(is);
-
+        DocumentBuilder builder = xmlFactory.newDocumentBuilder(); InputSource is = new InputSource(new StringReader(validXml)); Document doc = builder.parse(is);
         NodeList eventNodes = doc.getElementsByTagName("Event");
         for (int i = 0; i < eventNodes.getLength(); i++) {
-            Node eventNode = eventNodes.item(i);
-            if (eventNode.getNodeType() == Node.ELEMENT_NODE) {
-                Element eventElement = (Element) eventNode;
+            Element eventElement = (Element) eventNodes.item(i);
+            Element systemElement = (Element) eventElement.getElementsByTagName("System").item(0);
+            String eventId = systemElement.getElementsByTagName("EventID").item(0).getTextContent();
+            String timeCreated = ((Element) systemElement.getElementsByTagName("TimeCreated").item(0)).getAttribute("SystemTime");
+            String providerName = ((Element) systemElement.getElementsByTagName("Provider").item(0)).getAttribute("Name");
+            String level = systemElement.getElementsByTagName("Level").item(0).getTextContent();
 
-                // Trích xuất từ <System>
-                Element systemElement = (Element) eventElement.getElementsByTagName("System").item(0);
-                String eventId = systemElement.getElementsByTagName("EventID").item(0).getTextContent();
-                String timeCreated = ((Element) systemElement.getElementsByTagName("TimeCreated").item(0)).getAttribute("SystemTime");
-                String providerName = ((Element) systemElement.getElementsByTagName("Provider").item(0)).getAttribute("Name");
-                String level = systemElement.getElementsByTagName("Level").item(0).getTextContent();
+            // Lấy Hostname từ thẻ <Computer> trong <System> (Chuẩn nhất)
+            String computer = "Unknown";
+            NodeList compNode = systemElement.getElementsByTagName("Computer");
+            if (compNode.getLength() > 0) computer = compNode.item(0).getTextContent();
 
-                // Trích xuất từ <EventData>
-                Element eventDataElement = (Element) eventElement.getElementsByTagName("EventData").item(0);
-                String fullDetails;
-                String description;
+            Element eventDataElement = (Element) eventElement.getElementsByTagName("EventData").item(0);
+            String user = "N/A"; String fullDetails = "";
 
-                if ("Microsoft-Windows-Sysmon".equals(providerName)) {
-                    fullDetails = parseSysmonEventData(eventDataElement, eventId);
-                } else {
-                    fullDetails = parseGenericEventData(eventDataElement);
+            if (eventDataElement != null) {
+                NodeList dataNodes = eventDataElement.getElementsByTagName("Data"); StringBuilder sb = new StringBuilder();
+                for (int j = 0; j < dataNodes.getLength(); j++) {
+                    Node node = dataNodes.item(j); Node nameAttr = node.getAttributes().getNamedItem("Name"); String val = node.getTextContent();
+                    if (nameAttr != null) {
+                        String name = nameAttr.getNodeValue();
+                        sb.append(name).append(": ").append(val).append("\n");
+
+                        // Tách User: DOMAIN\User -> User
+                        if (("User".equals(name) || "TargetUserName".equals(name) || "SubjectUserName".equals(name)) && !val.equals("-")) {
+                            if (val.contains("\\")) {
+                                user = val.substring(val.indexOf("\\") + 1);
+                            } else {
+                                user = val;
+                            }
+                        }
+                    } else sb.append(val).append("\n");
                 }
-
-                // Lấy dòng đầu tiên làm mô tả tóm tắt
-                description = fullDetails.split("\n")[0] + " [...]";
-                events.add(new LogEvent(eventId, timeCreated, providerName, level, description, fullDetails));
+                fullDetails = sb.toString().trim();
             }
+            String description = fullDetails.split("\n")[0] + " [...]";
+            events.add(new LogEvent(eventId, timeCreated, providerName, level, description, user, computer, fullDetails));
         }
         return events;
     }
 
-    /**
-     * Phân tích EventData cho log Sysmon (có định dạng "Name")
-     */
-    private String parseSysmonEventData(Element eventDataElement, String eventId) {
-        if (eventDataElement == null) return "No EventData";
-        StringBuilder details = new StringBuilder();
-
-        // Thêm tiêu đề dựa trên Event ID
-        switch (eventId) {
-            case "1": details.append("[Process Create]\n"); break;
-            case "3": details.append("[Network Connect]\n"); break;
-            case "7": details.append("[Image Load]\n"); break;
-            case "8": details.append("[Create Remote Thread]\n"); break;
-            case "10": details.append("[Process Access]\n"); break;
-            case "11": details.append("[File Create]\n"); break;
-            case "22": details.append("[DNS Query]\n"); break;
-            default: details.append("[Sysmon Event ID: ").append(eventId).append("]\n");
-        }
-
-        NodeList dataNodes = eventDataElement.getElementsByTagName("Data");
-        for (int j = 0; j < dataNodes.getLength(); j++) {
-            Node dataNode = dataNodes.item(j);
-            Node nameAttr = dataNode.getAttributes().getNamedItem("Name");
-            if (nameAttr != null) {
-                details.append(nameAttr.getNodeValue()).append(": ").append(dataNode.getTextContent()).append("\n");
-            }
-        }
-        return details.toString().trim();
-    }
-
-    /**
-     * Phân tích EventData cho log chung (Application, System)
-     */
-    private String parseGenericEventData(Element eventDataElement) {
-        if (eventDataElement == null) return "No EventData";
-        StringBuilder details = new StringBuilder();
-        NodeList dataNodes = eventDataElement.getElementsByTagName("Data");
-        for (int j = 0; j < dataNodes.getLength(); j++) {
-            Node dataNode = dataNodes.item(j);
-            Node nameAttr = dataNode.getAttributes().getNamedItem("Name");
-            if (nameAttr != null) {
-                // Định dạng có tên (Ví dụ: một số log PowerShell)
-                details.append(nameAttr.getNodeValue()).append(": ").append(dataNode.getTextContent()).append("\n");
-            } else {
-                // Định dạng không tên (Ví dụ: Application)
-                details.append(dataNode.getTextContent()).append("\n");
-            }
-        }
-        // Nếu không có thẻ <Data> nào, trả về chuỗi rỗng thay vì "No EventData"
-        if (details.length() == 0) return "No specific data";
-        return details.toString().trim();
-    }
-
-    /**
-     * Hiển thị cửa sổ pop-up chi tiết
-     */
-    private void showLogDetails(LogEvent logEvent) {
-        Alert alert = new Alert(Alert.AlertType.INFORMATION);
-        alert.setTitle("Chi tiết Log Event: " + logEvent.getEventId());
-        alert.setHeaderText("Provider: " + logEvent.getProviderName() + "\nTime: " + logEvent.getTimeCreated());
-
-        TextArea textArea = new TextArea(logEvent.getFullDetails());
-        textArea.setEditable(false);
-        textArea.setWrapText(true);
-        textArea.setMaxWidth(Double.MAX_VALUE);
-        textArea.setMaxHeight(Double.MAX_VALUE);
-        GridPane.setVgrow(textArea, Priority.ALWAYS);
-        GridPane.setHgrow(textArea, Priority.ALWAYS);
-
-        GridPane expContent = new GridPane();
-        expContent.setMaxWidth(Double.MAX_VALUE);
-        expContent.add(textArea, 0, 0);
-
-        alert.getDialogPane().setExpandableContent(expContent);
-        alert.getDialogPane().setExpanded(true); // Tự động mở rộng
-        alert.getDialogPane().setPrefWidth(600); // Đặt chiều rộng
-        alert.getDialogPane().setPrefHeight(400); // Đặt chiều cao
-
-        Stage stage = (Stage) alert.getDialogPane().getScene().getWindow();
-        stage.setAlwaysOnTop(true);
-        alert.showAndWait();
-    }
-
-    /**
-     * Hiển thị cửa sổ pop-up lỗi
-     */
-    private void showError(String title, String header, Throwable ex) {
-        Platform.runLater(() -> {
-            Alert alert = new Alert(Alert.AlertType.ERROR);
-            alert.setTitle(title);
-            alert.setHeaderText(header);
-            alert.setContentText("Lỗi: " + ex.getMessage());
-
-            // Thêm stack trace vào expandable content
-            TextArea textArea = new TextArea(ex.toString());
-            textArea.setEditable(false);
-            textArea.setWrapText(true);
-            GridPane.setVgrow(textArea, Priority.ALWAYS);
-            GridPane.setHgrow(textArea, Priority.ALWAYS);
-            GridPane expContent = new GridPane();
-            expContent.setMaxWidth(Double.MAX_VALUE);
-            expContent.add(textArea, 0, 0);
-            alert.getDialogPane().setExpandableContent(expContent);
-
-            alert.showAndWait();
+    // ... (Giữ nguyên các phần khác) ...
+    private void setupDashboard() {
+        colAgentName.setCellValueFactory(new PropertyValueFactory<>("name")); colAgentIp.setCellValueFactory(new PropertyValueFactory<>("ip"));
+        colAgentUser.setCellValueFactory(new PropertyValueFactory<>("user")); colAgentStatus.setCellValueFactory(new PropertyValueFactory<>("status"));
+        colAgentLastSeen.setCellValueFactory(new PropertyValueFactory<>("lastSeen"));
+        colAgentStatus.setCellFactory(column -> new TableCell<>() {
+            @Override protected void updateItem(String item, boolean empty) { super.updateItem(item, empty); if (empty || item == null) { setText(null); setGraphic(null); setStyle(""); } else { Label lbl = new Label(item); if ("Online".equals(item)) lbl.getStyleClass().add("status-badge-online"); else if ("Offline".equals(item)) lbl.getStyleClass().add("status-badge-offline"); else lbl.setStyle("-fx-text-fill: orange;"); setGraphic(lbl); } }
         });
+        colAgentAction.setCellValueFactory(param -> { Button btn = new Button("Investigate"); btn.getStyleClass().add("button-primary"); btn.setOnAction(event -> switchToLogExplorer(param.getValue())); return new SimpleObjectProperty<>(btn); });
+        agentTableView.setItems(agentList);
     }
+    @FXML private void handleScanNetwork() {
+        if (scanStatusLabel != null) scanStatusLabel.setText("Scanning all local networks...");
+        Task<List<String>> scanTask = new Task<>() { @Override protected List<String> call() throws Exception { return networkScanner.scanAllNetworks(); } };
+        scanTask.setOnSucceeded(e -> { List<String> foundIps = scanTask.getValue(); for (String ip : foundIps) addAgentIfNotExists(ip, "Online"); if (scanStatusLabel != null) scanStatusLabel.setText("Scan complete. Found " + foundIps.size() + " agents."); updateActiveAgentsCount(); });
+        scanTask.setOnFailed(e -> { if (scanStatusLabel != null) scanStatusLabel.setText("Scan failed."); e.getSource().getException().printStackTrace(); });
+        new Thread(scanTask).start();
+    }
+    @FXML private void handleAddAgent() { String ip = agentIpField.getText().trim(); if (!ip.isEmpty()) { addAgentIfNotExists(ip, "Unknown"); agentIpField.clear(); checkAllAgentsHealth(); } }
+    private boolean addAgentIfNotExists(String ip, String initialStatus) {
+        for (Agent a : agentList) if (a.getIp().equals(ip)) { a.setStatus("Online"); return false; }
+        String name = ip.equals("127.0.0.1") ? "LOCAL-HOST" : "Checking..."; String user = "Checking...";
+        agentList.add(new Agent(name, ip, initialStatus, user, LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss")))); return true;
+    }
+    private void updateActiveAgentsCount() { lblActiveAgents.setText(String.valueOf(agentList.stream().filter(a -> "Online".equals(a.getStatus())).count())); }
+    @FXML private void switchView(javafx.event.ActionEvent event) {
+        if (event.getSource() == btnDashboard) { dashboardView.setVisible(true); logExplorerView.setVisible(false); btnDashboard.getStyleClass().add("active"); btnLogExplorer.getStyleClass().remove("active"); }
+        else if (event.getSource() == btnLogExplorer) { dashboardView.setVisible(false); logExplorerView.setVisible(true); btnDashboard.getStyleClass().remove("active"); btnLogExplorer.getStyleClass().add("active"); }
+    }
+    private void switchToLogExplorer(Agent agent) {
+        dashboardView.setVisible(false); logExplorerView.setVisible(true); btnDashboard.getStyleClass().remove("active"); btnLogExplorer.getStyleClass().add("active");
+        if ("localhost".equals(agent.getIp()) || "127.0.0.1".equals(agent.getIp())) currentTargetField.setText("localhost"); else currentTargetField.setText(agent.getIp());
+        handleGetLogs();
+    }
+    private void setupLogExplorer() {
+        logChannelComboBox.setItems(FXCollections.observableArrayList("Microsoft-Windows-Sysmon/Operational", "Application", "Security", "System"));
+        logChannelComboBox.setValue("Microsoft-Windows-Sysmon/Operational");
+        eventIdColumn.setCellValueFactory(new PropertyValueFactory<>("eventId")); timeColumn.setCellValueFactory(new PropertyValueFactory<>("timeCreated"));
+        providerColumn.setCellValueFactory(new PropertyValueFactory<>("providerName")); levelColumn.setCellValueFactory(new PropertyValueFactory<>("level"));
+        descriptionColumn.setCellValueFactory(new PropertyValueFactory<>("description")); userColumn.setCellValueFactory(new PropertyValueFactory<>("user"));
+        hostColumn.setCellValueFactory(new PropertyValueFactory<>("host")); // MAP CỘT HOST
+        logTableView.setRowFactory(tv -> { TableRow<LogEvent> row = new TableRow<>(); row.setOnMouseClicked(event -> { if (event.getClickCount() == 2 && (!row.isEmpty())) showLogDetails(row.getItem()); }); return row; });
+        autoRefreshTimeline = new Timeline(new KeyFrame(Duration.seconds(10), e -> handleGetLogs())); autoRefreshTimeline.setCycleCount(Timeline.INDEFINITE);
+        autoRefreshToggle.selectedProperty().addListener((obs, oldVal, newVal) -> { if (newVal) autoRefreshTimeline.play(); else autoRefreshTimeline.stop(); });
+    }
+    @FXML private void handleGetLogs() {
+        String target = currentTargetField.getText(); if (target == null || target.isEmpty()) { target = "localhost"; currentTargetField.setText("localhost"); }
+        LogRequest request = new LogRequest(); request.setLogChannel(logChannelComboBox.getValue()); request.setEventCount(eventCountSpinner.getValue()); request.setXpathQuery(xpathQueryField.getText());
+        Task<List<LogEvent>> task;
+        if ("localhost".equals(target) || "127.0.0.1".equals(target)) task = createLocalTask(request);
+        else { if (!target.startsWith("http")) target = "http://" + target + ":9876"; task = createRemoteTask(request, target); }
+        task.setOnSucceeded(e -> { logTableView.setItems(FXCollections.observableArrayList(task.getValue())); loadingIndicator.setVisible(false); });
+        task.setOnFailed(e -> { loadingIndicator.setVisible(false); showError("Fetch Error", "Failed to get logs", task.getException()); });
+        loadingIndicator.setVisible(true); new Thread(task).start();
+    }
+    private Task<List<LogEvent>> createLocalTask(LogRequest request) {
+        return new Task<>() { @Override protected List<LogEvent> call() throws Exception {
+            List<String> command = new ArrayList<>(); command.add("wevtutil"); command.add("qe"); command.add(request.getLogChannel());
+            command.add("/c:" + request.getEventCount()); command.add("/rd:true"); command.add("/f:xml");
+            if (request.getXpathQuery() != null && !request.getXpathQuery().trim().isEmpty()) command.add("/q:" + request.getXpathQuery());
+            ProcessBuilder pb = new ProcessBuilder(command); pb.redirectErrorStream(true); Process process = pb.start();
+            StringBuilder xmlOutput = new StringBuilder(); try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) { String line; while ((line = reader.readLine()) != null) xmlOutput.append(line).append(System.lineSeparator()); }
+            int exitCode = process.waitFor(); if (exitCode != 0) throw new RuntimeException("wevtutil error: " + xmlOutput);
+            return parseLogEvents(xmlOutput.toString());
+        }};
+    }
+    private Task<List<LogEvent>> createRemoteTask(LogRequest request, String hostUrl) {
+        return new Task<>() { @Override protected List<LogEvent> call() throws Exception {
+            String jsonBody = jsonMapper.writeValueAsString(request); HttpRequest req = HttpRequest.newBuilder().uri(URI.create(hostUrl + "/get-logs")).header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(jsonBody)).build();
+            HttpResponse<String> res = httpClient.send(req, HttpResponse.BodyHandlers.ofString()); if (res.statusCode() != 200) throw new RuntimeException("Agent Error: " + res.body());
+            return parseLogEvents(res.body());
+        }};
+    }
+    private void showLogDetails(LogEvent logEvent) { Alert alert = new Alert(Alert.AlertType.INFORMATION); alert.setTitle("Details"); alert.setHeaderText(logEvent.getEventId()); TextArea area = new TextArea(logEvent.getFullDetails()); area.setEditable(false); area.setWrapText(true); GridPane.setVgrow(area, Priority.ALWAYS); GridPane.setHgrow(area, Priority.ALWAYS); GridPane content = new GridPane(); content.add(area, 0, 0); content.setMaxWidth(Double.MAX_VALUE); alert.getDialogPane().setExpandableContent(content); alert.getDialogPane().setExpanded(true); alert.showAndWait(); }
+    private void showError(String t, String h, Throwable ex) { Platform.runLater(() -> { Alert a = new Alert(Alert.AlertType.ERROR); a.setTitle(t); a.setHeaderText(h); a.setContentText(ex.getMessage()); a.showAndWait(); }); }
 }

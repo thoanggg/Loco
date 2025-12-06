@@ -1,0 +1,137 @@
+/* --- Global Dark Theme --- */
+.root {
+    -fx-background-color: #1b1b2f; /* Màu nền tối chủ đạo */
+    -fx-font-family: 'Segoe UI', sans-serif;
+    -fx-text-fill: #e0e0e0;
+}
+
+/* --- Sidebar --- */
+.sidebar {
+    -fx-background-color: #161625;
+    -fx-border-color: transparent #2e2e40 transparent transparent;
+    -fx-border-width: 1;
+}
+
+.app-title {
+    -fx-font-size: 20px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #7e57c2; /* Màu tím logo */
+    -fx-padding: 20;
+}
+
+.menu-button {
+    -fx-background-color: transparent;
+    -fx-text-fill: #a0a0b0;
+    -fx-font-size: 14px;
+    -fx-alignment: CENTER_LEFT;
+    -fx-padding: 10 20;
+    -fx-cursor: hand;
+}
+
+.menu-button:hover {
+    -fx-background-color: #232336;
+    -fx-text-fill: white;
+}
+
+.menu-button.active {
+    -fx-background-color: #232336;
+    -fx-text-fill: #7e57c2;
+    -fx-border-color: transparent transparent transparent #7e57c2;
+    -fx-border-width: 0 0 0 3;
+}
+
+/* --- Content Area --- */
+.content-header {
+    -fx-font-size: 24px;
+    -fx-font-weight: bold;
+    -fx-text-fill: white;
+    -fx-padding: 0 0 20 0;
+}
+
+/* --- Cards (Thẻ thống kê) --- */
+.card {
+    -fx-background-color: #232336;
+    -fx-background-radius: 10;
+    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.3), 10, 0, 0, 5);
+    -fx-padding: 20;
+}
+
+.card-title {
+    -fx-text-fill: #a0a0b0;
+    -fx-font-size: 14px;
+}
+
+.card-value {
+    -fx-text-fill: white;
+    -fx-font-size: 32px;
+    -fx-font-weight: bold;
+}
+
+/* --- Table View --- */
+.table-view {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+}
+
+.table-view .column-header-background {
+    -fx-background-color: #161625;
+    -fx-background-radius: 5 5 0 0;
+}
+
+.table-view .column-header .label {
+    -fx-text-fill: #a0a0b0;
+    -fx-font-weight: bold;
+}
+
+.table-view .table-cell {
+    -fx-text-fill: #e0e0e0;
+    -fx-alignment: CENTER_LEFT;
+}
+
+.table-row-cell {
+    -fx-background-color: #232336;
+    -fx-border-color: transparent transparent #1b1b2f transparent;
+}
+
+.table-row-cell:odd {
+    -fx-background-color: #27273c;
+}
+
+.table-row-cell:selected {
+    -fx-background-color: #3f3f5f;
+}
+
+/* --- Inputs & Buttons --- */
+.text-field, .combo-box, .spinner {
+    -fx-background-color: #161625;
+    -fx-text-fill: white;
+    -fx-border-color: #444;
+    -fx-border-radius: 5;
+    -fx-background-radius: 5;
+}
+
+.button-primary {
+    -fx-background-color: #7e57c2;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-background-radius: 5;
+    -fx-cursor: hand;
+}
+
+.button-primary:hover {
+    -fx-background-color: #9575cd;
+}
+
+.status-badge-online {
+    -fx-background-color: rgba(76, 175, 80, 0.2);
+    -fx-text-fill: #4caf50;
+    -fx-background-radius: 15;
+    -fx-padding: 2 10;
+}
+
+.status-badge-offline {
+    -fx-background-color: rgba(244, 67, 54, 0.2);
+    -fx-text-fill: #f44336;
+    -fx-background-radius: 15;
+    -fx-padding: 2 10;
+}
