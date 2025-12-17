@@ -9,8 +9,12 @@ public class LogEvent {
     private final SimpleStringProperty level;
     private final SimpleStringProperty description;
     private final SimpleStringProperty user;
-    private final SimpleStringProperty host; // THÊM MỚI
+    private final SimpleStringProperty host;
     private final String fullDetails;
+
+    // --- THÊM MỚI: Cờ đánh dấu Alert ---
+    private boolean isAlert = false;
+    private String alertSeverity = "";
 
     public LogEvent(String eventId, String timeCreated, String providerName, String level, String description, String user, String host, String fullDetails) {
         this.eventId = new SimpleStringProperty(eventId);
@@ -19,7 +23,7 @@ public class LogEvent {
         this.level = new SimpleStringProperty(level);
         this.description = new SimpleStringProperty(description);
         this.user = new SimpleStringProperty(user);
-        this.host = new SimpleStringProperty(host); // Init
+        this.host = new SimpleStringProperty(host);
         this.fullDetails = fullDetails;
     }
 
@@ -41,9 +45,15 @@ public class LogEvent {
     public String getUser() { return user.get(); }
     public SimpleStringProperty userProperty() { return user; }
 
-    // Getter cho Host
     public String getHost() { return host.get(); }
     public SimpleStringProperty hostProperty() { return host; }
 
     public String getFullDetails() { return fullDetails; }
+
+    // --- Getters/Setters cho Alert ---
+    public boolean isAlert() { return isAlert; }
+    public void setAlert(boolean alert) { isAlert = alert; }
+
+    public String getAlertSeverity() { return alertSeverity; }
+    public void setAlertSeverity(String severity) { this.alertSeverity = severity; }
 }

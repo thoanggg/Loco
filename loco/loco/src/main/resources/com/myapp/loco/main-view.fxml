@@ -11,6 +11,7 @@
 <?import javafx.scene.control.TableView?>
 <?import javafx.scene.control.TextField?>
 <?import javafx.scene.control.ToggleButton?>
+<?import javafx.scene.control.Tooltip?>
 <?import javafx.scene.layout.BorderPane?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.StackPane?>
@@ -26,6 +27,9 @@
                 <padding><Insets top="20"/></padding>
                 <Button fx:id="btnDashboard" text="🏠 Dashboard" maxWidth="Infinity" styleClass="menu-button, active" onAction="#switchView" />
                 <Button fx:id="btnLogExplorer" text="🔍 Log Explorer" maxWidth="Infinity" styleClass="menu-button" onAction="#switchView" />
+                <!-- THÊM MỚI: Nút Rules -->
+                <Button fx:id="btnRules" text="⚡ Rules Engine" maxWidth="Infinity" styleClass="menu-button" onAction="#switchView" />
+
                 <Button text="⚙️ Settings" maxWidth="Infinity" styleClass="menu-button" />
             </VBox>
         </VBox>
@@ -45,7 +49,8 @@
                     </VBox>
                     <VBox styleClass="card" prefWidth="250">
                         <Label text="Total Detections" styleClass="card-title"/>
-                        <Label text="0" styleClass="card-value" style="-fx-text-fill: #ffb74d;"/>
+                        <!-- Label hiển thị số lượng cảnh báo -->
+                        <Label fx:id="lblTotalAlerts" text="0" styleClass="card-value" style="-fx-text-fill: #ffb74d;"/>
                     </VBox>
                     <VBox styleClass="card" prefWidth="250">
                         <Label text="Critical Alerts" styleClass="card-title"/>
@@ -78,17 +83,15 @@
             <VBox fx:id="logExplorerView" spacing="15.0" visible="false">
                 <Label text="Centralized Log Explorer" styleClass="content-header"/>
 
-                <!-- Main Toolbar: Fetch Controls -->
                 <HBox spacing="10.0" alignment="CENTER_LEFT" styleClass="card">
                     <padding><Insets top="10" right="10" bottom="10" left="10"/></padding>
-
                     <Label text="Source:"/>
-                    <!-- THAY ĐỔI: Sử dụng ComboBox thay vì TextField -->
                     <ComboBox fx:id="targetAgentCombo" prefWidth="220.0" promptText="Select Source"/>
-
+                    <Button text="X" onAction="#handleClearTarget" style="-fx-background-color: #555; -fx-text-fill: white; -fx-font-size: 10px;">
+                        <tooltip><Tooltip text="Reset to All Agents"/></tooltip>
+                    </Button>
                     <Label text="Channel:"/>
                     <ComboBox fx:id="logChannelComboBox" prefWidth="220.0" />
-
                     <Button fx:id="getLogsButton" text="Fetch Logs" onAction="#handleGetLogs" styleClass="button-primary"/>
                     <ToggleButton fx:id="autoRefreshToggle" text="Auto-Refresh" />
                     <ProgressIndicator fx:id="loadingIndicator" prefHeight="20.0" prefWidth="20.0" visible="false"/>
@@ -97,24 +100,17 @@
                 <!-- Filter Toolbar -->
                 <HBox spacing="10.0" alignment="CENTER_LEFT" style="-fx-background-color: #232336; -fx-padding: 10; -fx-background-radius: 5;">
                     <Label text="🔍 Filters:" style="-fx-text-fill: #a0a0b0; -fx-font-weight: bold;"/>
-
                     <TextField fx:id="filterUserField" promptText="Filter by User..." prefWidth="150"/>
                     <TextField fx:id="filterEventIdField" promptText="Event ID..." prefWidth="100"/>
-
                     <Label text="From:" style="-fx-text-fill: #a0a0b0;"/>
                     <DatePicker fx:id="filterStartDate" prefWidth="120" promptText="Start Date"/>
-
                     <Label text="To:" style="-fx-text-fill: #a0a0b0;"/>
                     <DatePicker fx:id="filterEndDate" prefWidth="120" promptText="End Date"/>
-
                     <Button text="Reset Filters" onAction="#handleResetFilters" style="-fx-background-color: #444; -fx-text-fill: white;"/>
                 </HBox>
 
-                <!-- Log Table -->
                 <TableView fx:id="logTableView" VBox.vgrow="ALWAYS">
-                    <columnResizePolicy>
-                        <TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/>
-                    </columnResizePolicy>
+                    <columnResizePolicy><TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/></columnResizePolicy>
                     <columns>
                         <TableColumn fx:id="eventIdColumn" text="Event ID" prefWidth="60"/>
                         <TableColumn fx:id="timeColumn" text="Time" prefWidth="140"/>
@@ -123,6 +119,35 @@
                         <TableColumn fx:id="providerColumn" text="Provider" prefWidth="120"/>
                         <TableColumn fx:id="levelColumn" text="Level" prefWidth="60"/>
                         <TableColumn fx:id="descriptionColumn" text="Description"/>
+                    </columns>
+                </TableView>
+            </VBox>
+
+            <!-- VIEW 3: RULES ENGINE (MỚI) -->
+            <VBox fx:id="rulesView" spacing="15.0" visible="false">
+                <Label text="Detection Rules Configuration" styleClass="content-header"/>
+
+                <!-- Khu vực thêm luật -->
+                <HBox spacing="10.0" alignment="CENTER_LEFT" styleClass="card">
+                    <padding><Insets top="10" right="10" bottom="10" left="10"/></padding>
+                    <TextField fx:id="ruleNameField" promptText="Rule Name (e.g. Detect Mimikatz)" prefWidth="200"/>
+                    <ComboBox fx:id="ruleFieldCombo" prefWidth="120" promptText="Field"/>
+                    <ComboBox fx:id="ruleConditionCombo" prefWidth="100" promptText="Condition"/>
+                    <TextField fx:id="ruleValueField" promptText="Value to match" HBox.hgrow="ALWAYS"/>
+                    <ComboBox fx:id="ruleSeverityCombo" prefWidth="100" promptText="Severity"/>
+                    <Button text="Add Rule" onAction="#handleAddRule" styleClass="button-primary"/>
+                </HBox>
+
+                <!-- Bảng danh sách luật -->
+                <TableView fx:id="rulesTableView" VBox.vgrow="ALWAYS">
+                    <columnResizePolicy><TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/></columnResizePolicy>
+                    <columns>
+                        <TableColumn fx:id="ruleNameCol" text="Rule Name" />
+                        <TableColumn fx:id="ruleFieldCol" text="Field" />
+                        <TableColumn fx:id="ruleConditionCol" text="Condition" />
+                        <TableColumn fx:id="ruleValueCol" text="Value" />
+                        <TableColumn fx:id="ruleSeverityCol" text="Severity" />
+                        <TableColumn fx:id="ruleActionCol" text="Action" />
                     </columns>
                 </TableView>
             </VBox>

@@ -1,5 +1,6 @@
 package com.myapp.loco;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import javafx.animation.KeyFrame;
 import javafx.animation.PauseTransition;
@@ -30,6 +31,7 @@ import org.xml.sax.InputSource;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.io.StringReader;
@@ -42,7 +44,11 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -50,73 +56,281 @@ import java.util.concurrent.Future;
 
 public class MainController {
 
-    @FXML private Button btnDashboard; @FXML private Button btnLogExplorer;
-    @FXML private VBox dashboardView; @FXML private VBox logExplorerView;
+    // --- Sidebar Buttons ---
+    @FXML private Button btnDashboard;
+    @FXML private Button btnLogExplorer;
+    @FXML private Button btnRules; // Nút mới
 
-    @FXML private Label lblActiveAgents; @FXML private TextField agentIpField; @FXML private Label scanStatusLabel;
+    // --- Views ---
+    @FXML private VBox dashboardView;
+    @FXML private VBox logExplorerView;
+    @FXML private VBox rulesView; // View mới
+
+    // --- Dashboard UI ---
+    @FXML private Label lblActiveAgents;
+    @FXML private Label lblTotalAlerts;
+    @FXML private TextField agentIpField;
+    @FXML private Label scanStatusLabel;
     @FXML private TableView<Agent> agentTableView;
-    @FXML private TableColumn<Agent, String> colAgentName; @FXML private TableColumn<Agent, String> colAgentIp; @FXML private TableColumn<Agent, String> colAgentUser;
-    @FXML private TableColumn<Agent, String> colAgentStatus; @FXML private TableColumn<Agent, String> colAgentLastSeen; @FXML private TableColumn<Agent, Button> colAgentAction;
+    @FXML private TableColumn<Agent, String> colAgentName;
+    @FXML private TableColumn<Agent, String> colAgentIp;
+    @FXML private TableColumn<Agent, String> colAgentUser;
+    @FXML private TableColumn<Agent, String> colAgentStatus;
+    @FXML private TableColumn<Agent, String> colAgentLastSeen;
+    @FXML private TableColumn<Agent, Button> colAgentAction;
 
-    // UI Log Explorer
-    // THAY ĐỔI: TextField -> ComboBox<Agent>
+    // --- Log Explorer UI ---
     @FXML private ComboBox<Agent> targetAgentCombo;
     @FXML private ComboBox<String> logChannelComboBox;
-    @FXML private Button getLogsButton; @FXML private ToggleButton autoRefreshToggle; @FXML private ProgressIndicator loadingIndicator;
+    @FXML private Button getLogsButton;
+    @FXML private ToggleButton autoRefreshToggle;
+    @FXML private ProgressIndicator loadingIndicator;
     @FXML private TableView<LogEvent> logTableView;
-    @FXML private TableColumn<LogEvent, String> eventIdColumn; @FXML private TableColumn<LogEvent, String> timeColumn; @FXML private TableColumn<LogEvent, String> providerColumn;
-    @FXML private TableColumn<LogEvent, String> levelColumn; @FXML private TableColumn<LogEvent, String> descriptionColumn; @FXML private TableColumn<LogEvent, String> userColumn; @FXML private TableColumn<LogEvent, String> hostColumn;
+    @FXML private TableColumn<LogEvent, String> eventIdColumn;
+    @FXML private TableColumn<LogEvent, String> timeColumn;
+    @FXML private TableColumn<LogEvent, String> providerColumn;
+    @FXML private TableColumn<LogEvent, String> levelColumn;
+    @FXML private TableColumn<LogEvent, String> descriptionColumn;
+    @FXML private TableColumn<LogEvent, String> userColumn;
+    @FXML private TableColumn<LogEvent, String> hostColumn;
 
     @FXML private TextField filterUserField;
     @FXML private TextField filterEventIdField;
     @FXML private DatePicker filterStartDate;
     @FXML private DatePicker filterEndDate;
 
+    // --- Rules Engine UI (Mới) ---
+    @FXML private TextField ruleNameField;
+    @FXML private ComboBox<String> ruleFieldCombo;
+    @FXML private ComboBox<String> ruleConditionCombo;
+    @FXML private TextField ruleValueField;
+    @FXML private ComboBox<String> ruleSeverityCombo;
+    @FXML private TableView<DetectionRule> rulesTableView;
+    @FXML private TableColumn<DetectionRule, String> ruleNameCol;
+    @FXML private TableColumn<DetectionRule, String> ruleFieldCol;
+    @FXML private TableColumn<DetectionRule, String> ruleConditionCol;
+    @FXML private TableColumn<DetectionRule, String> ruleValueCol;
+    @FXML private TableColumn<DetectionRule, String> ruleSeverityCol;
+    @FXML private TableColumn<DetectionRule, Button> ruleActionCol;
+
+    // --- Data & Helpers ---
     private final ObservableList<Agent> agentList = FXCollections.observableArrayList();
     private final ObservableList<LogEvent> masterLogList = FXCollections.observableArrayList();
     private FilteredList<LogEvent> filteredLogList;
+    private final ObservableList<DetectionRule> rulesList = FXCollections.observableArrayList(); // Danh sách luật
 
-    // Agent đại diện cho việc chọn tất cả
     private final Agent ALL_AGENTS = new Agent("All Agents", "ALL", "Virtual", "", "");
+    private Timeline autoRefreshTimeline;
+    private Timeline agentHealthCheckTimeline;
 
-    private Timeline autoRefreshTimeline; private Timeline agentHealthCheckTimeline;
-    private final HttpClient httpClient = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).connectTimeout(java.time.Duration.ofSeconds(2)).build();
+    private final HttpClient httpClient = HttpClient.newBuilder()
+            .version(HttpClient.Version.HTTP_1_1)
+            .connectTimeout(java.time.Duration.ofSeconds(2))
+            .build();
     private final ObjectMapper jsonMapper = new ObjectMapper();
     private final DocumentBuilderFactory xmlFactory = DocumentBuilderFactory.newInstance();
     private final NetworkScanner networkScanner = new NetworkScanner();
+    private static final String AGENT_FILE = "agents.json";
+
+    private int totalAlertCount = 0;
 
     @FXML public void initialize() {
-        setupDashboard(); setupLogExplorer();
+        setupDashboard();
+        setupLogExplorer();
+        setupRulesEngine(); // Init Rules
 
-        String localHost = "Unknown"; try { localHost = java.net.InetAddress.getLocalHost().getHostName(); } catch(Exception e){}
-        agentList.add(new Agent(localHost, "127.0.0.1", "Online", System.getProperty("user.name"), LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"))));
+        loadSavedAgents();
+        addAgentIfNotExists("127.0.0.1", "Online");
+
         updateActiveAgentsCount();
-
-        // Đồng bộ danh sách Agent vào ComboBox Target
         updateTargetCombo();
         agentList.addListener((ListChangeListener<Agent>) c -> updateTargetCombo());
 
         agentHealthCheckTimeline = new Timeline(new KeyFrame(Duration.seconds(15), e -> checkAllAgentsHealth()));
-        agentHealthCheckTimeline.setCycleCount(Timeline.INDEFINITE); agentHealthCheckTimeline.play();
+        agentHealthCheckTimeline.setCycleCount(Timeline.INDEFINITE);
+        agentHealthCheckTimeline.play();
 
-        PauseTransition pause = new PauseTransition(Duration.seconds(1)); pause.setOnFinished(event -> handleScanNetwork()); pause.play();
+        PauseTransition pause = new PauseTransition(Duration.seconds(1));
+        pause.setOnFinished(event -> handleScanNetwork());
+        pause.play();
     }
 
-    private void updateTargetCombo() {
-        // Lưu lại selection hiện tại
-        Agent selected = targetAgentCombo.getValue();
+    // --- RULES ENGINE LOGIC ---
+    private void setupRulesEngine() {
+        ruleNameCol.setCellValueFactory(new PropertyValueFactory<>("name"));
+        ruleFieldCol.setCellValueFactory(new PropertyValueFactory<>("field"));
+        ruleConditionCol.setCellValueFactory(new PropertyValueFactory<>("condition"));
+        ruleValueCol.setCellValueFactory(new PropertyValueFactory<>("value"));
+        ruleSeverityCol.setCellValueFactory(new PropertyValueFactory<>("severity"));
 
-        ObservableList<Agent> comboItems = FXCollections.observableArrayList();
-        comboItems.add(ALL_AGENTS);
-        comboItems.addAll(agentList);
-        targetAgentCombo.setItems(comboItems);
+        ruleActionCol.setCellValueFactory(param -> {
+            Button btn = new Button("Delete");
+            btn.setStyle("-fx-background-color: #ef5350; -fx-text-fill: white;");
+            btn.setOnAction(event -> rulesList.remove(param.getValue()));
+            return new SimpleObjectProperty<>(btn);
+        });
 
-        // Restore selection hoặc chọn All Agents mặc định
-        if (selected != null && comboItems.contains(selected)) {
-            targetAgentCombo.setValue(selected);
-        } else {
-            targetAgentCombo.setValue(ALL_AGENTS);
+        rulesTableView.setItems(rulesList);
+
+        ruleFieldCombo.setItems(FXCollections.observableArrayList("Description", "EventID", "User", "Host"));
+        ruleConditionCombo.setItems(FXCollections.observableArrayList("Contains", "Equals", "Starts With"));
+        ruleSeverityCombo.setItems(FXCollections.observableArrayList("High", "Medium", "Low"));
+
+        // Luật mẫu
+        rulesList.add(new DetectionRule("Detect Mimikatz", "Description", "Contains", "mimikatz", "High"));
+        rulesList.add(new DetectionRule("Recon: Whoami", "Description", "Contains", "whoami", "Low"));
+        rulesList.add(new DetectionRule("Defense Evasion", "Description", "Contains", "-EncodedCommand", "High"));
+        rulesList.add(new DetectionRule("Clear Logs", "EventID", "Equals", "1102", "Medium"));
+    }
+
+    @FXML
+    private void handleAddRule() {
+        if (ruleNameField.getText().isEmpty() || ruleValueField.getText().isEmpty()) return;
+
+        rulesList.add(new DetectionRule(
+                ruleNameField.getText(),
+                ruleFieldCombo.getValue() != null ? ruleFieldCombo.getValue() : "Description",
+                ruleConditionCombo.getValue() != null ? ruleConditionCombo.getValue() : "Contains",
+                ruleValueField.getText(),
+                ruleSeverityCombo.getValue() != null ? ruleSeverityCombo.getValue() : "Medium"
+        ));
+        ruleNameField.clear(); ruleValueField.clear();
+    }
+
+    private void applyRules(LogEvent event) {
+        for (DetectionRule rule : rulesList) {
+            String checkVal = "";
+            switch(rule.getField()) {
+                case "Description": checkVal = event.getDescription() + " " + event.getFullDetails(); break;
+                case "EventID": checkVal = event.getEventId(); break;
+                case "User": checkVal = event.getUser(); break;
+                case "Host": checkVal = event.getHost(); break;
+            }
+
+            if(checkVal == null) continue;
+            checkVal = checkVal.toLowerCase();
+            String ruleVal = rule.getValue().toLowerCase();
+
+            boolean match = false;
+            switch(rule.getCondition()) {
+                case "Contains": match = checkVal.contains(ruleVal); break;
+                case "Equals": match = checkVal.equals(ruleVal); break;
+                case "Starts With": match = checkVal.startsWith(ruleVal); break;
+            }
+
+            if (match) {
+                event.setAlert(true);
+                event.setAlertSeverity(rule.getSeverity());
+                totalAlertCount++;
+                Platform.runLater(() -> lblTotalAlerts.setText(String.valueOf(totalAlertCount)));
+                break;
+            }
         }
+    }
+
+    // --- NAVIGATION UPDATE ---
+    @FXML private void switchView(javafx.event.ActionEvent event) {
+        dashboardView.setVisible(false); logExplorerView.setVisible(false); rulesView.setVisible(false);
+        btnDashboard.getStyleClass().remove("active"); btnLogExplorer.getStyleClass().remove("active"); btnRules.getStyleClass().remove("active");
+
+        if (event.getSource() == btnDashboard) {
+            dashboardView.setVisible(true); btnDashboard.getStyleClass().add("active");
+        } else if (event.getSource() == btnLogExplorer) {
+            logExplorerView.setVisible(true); btnLogExplorer.getStyleClass().add("active");
+        } else if (event.getSource() == btnRules) {
+            rulesView.setVisible(true); btnRules.getStyleClass().add("active");
+        }
+    }
+
+    // --- LOG EXPLORER (CẬP NHẬT TÔ MÀU) ---
+    private void setupLogExplorer() {
+        logChannelComboBox.setItems(FXCollections.observableArrayList("Microsoft-Windows-Sysmon/Operational", "Application", "Security", "System"));
+        logChannelComboBox.setValue("Microsoft-Windows-Sysmon/Operational");
+
+        targetAgentCombo.setConverter(new StringConverter<Agent>() {
+            @Override public String toString(Agent a) { if (a == null) return ""; if ("ALL".equals(a.getIp())) return "All Agents"; return a.getName() + " (" + a.getIp() + ")"; }
+            @Override public Agent fromString(String s) { return null; }
+        });
+
+        eventIdColumn.setCellValueFactory(new PropertyValueFactory<>("eventId"));
+        timeColumn.setCellValueFactory(new PropertyValueFactory<>("timeCreated"));
+        providerColumn.setCellValueFactory(new PropertyValueFactory<>("providerName"));
+        levelColumn.setCellValueFactory(new PropertyValueFactory<>("level"));
+        descriptionColumn.setCellValueFactory(new PropertyValueFactory<>("description"));
+        userColumn.setCellValueFactory(new PropertyValueFactory<>("user"));
+        hostColumn.setCellValueFactory(new PropertyValueFactory<>("host"));
+
+        // Tô màu dòng alert
+        logTableView.setRowFactory(tv -> {
+            TableRow<LogEvent> row = new TableRow<>();
+            row.setOnMouseClicked(event -> { if (event.getClickCount() == 2 && (!row.isEmpty())) showLogDetails(row.getItem()); });
+
+            row.itemProperty().addListener((obs, oldVal, newVal) -> {
+                if (newVal != null && newVal.isAlert()) {
+                    if ("High".equals(newVal.getAlertSeverity())) {
+                        row.setStyle("-fx-background-color: rgba(239, 83, 80, 0.3);"); // Đỏ
+                    } else if ("Medium".equals(newVal.getAlertSeverity())) {
+                        row.setStyle("-fx-background-color: rgba(255, 167, 38, 0.3);"); // Cam
+                    } else {
+                        row.setStyle("-fx-background-color: rgba(255, 238, 88, 0.2);"); // Vàng
+                    }
+                } else {
+                    row.setStyle("");
+                }
+            });
+            return row;
+        });
+
+        filteredLogList = new FilteredList<>(masterLogList, p -> true);
+        SortedList<LogEvent> sortedData = new SortedList<>(filteredLogList);
+        sortedData.comparatorProperty().bind(logTableView.comparatorProperty());
+        logTableView.setItems(sortedData);
+
+        filterUserField.textProperty().addListener((o, old, val) -> updateFilters());
+        filterEventIdField.textProperty().addListener((o, old, val) -> updateFilters());
+        filterStartDate.valueProperty().addListener((o, old, val) -> updateFilters());
+        filterEndDate.valueProperty().addListener((o, old, val) -> updateFilters());
+
+        autoRefreshTimeline = new Timeline(new KeyFrame(Duration.seconds(10), e -> handleGetLogs()));
+        autoRefreshTimeline.setCycleCount(Timeline.INDEFINITE);
+        autoRefreshToggle.selectedProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal) autoRefreshTimeline.play(); else autoRefreshTimeline.stop();
+        });
+    }
+
+    // --- CÁC HÀM CÒN LẠI (GIỮ NGUYÊN) ---
+    private void loadSavedAgents() {
+        File file = new File(AGENT_FILE);
+        if (!file.exists()) return;
+        try {
+            List<Map<String, String>> savedData = jsonMapper.readValue(file, new TypeReference<>() {});
+            for (Map<String, String> data : savedData) {
+                String ip = data.get("ip");
+                String name = data.getOrDefault("name", "Unknown");
+                String user = data.getOrDefault("user", "Unknown");
+                String lastSeen = data.getOrDefault("lastSeen", "Never");
+                if (!"127.0.0.1".equals(ip)) {
+                    boolean exists = agentList.stream().anyMatch(a -> a.getIp().equals(ip));
+                    if (!exists) agentList.add(new Agent(name, ip, "Checking...", user, lastSeen));
+                }
+            }
+        } catch (Exception e) { System.err.println("Failed to load agents: " + e.getMessage()); }
+    }
+
+    private void saveAgents() {
+        try {
+            List<Map<String, String>> dataToSave = new ArrayList<>();
+            for (Agent agent : agentList) {
+                if ("127.0.0.1".equals(agent.getIp())) continue;
+                Map<String, String> map = new HashMap<>();
+                map.put("name", agent.getName());
+                map.put("ip", agent.getIp());
+                map.put("user", agent.getUser());
+                map.put("lastSeen", agent.getLastSeen());
+                dataToSave.add(map);
+            }
+            jsonMapper.writerWithDefaultPrettyPrinter().writeValue(new File(AGENT_FILE), dataToSave);
+        } catch (Exception e) { System.err.println("Failed to save agents: " + e.getMessage()); }
     }
 
     private void setupDashboard() {
@@ -130,6 +344,14 @@ public class MainController {
         agentTableView.setItems(agentList);
     }
 
+    private void updateTargetCombo() {
+        Agent selected = targetAgentCombo.getValue();
+        ObservableList<Agent> comboItems = FXCollections.observableArrayList();
+        comboItems.add(ALL_AGENTS); comboItems.addAll(agentList);
+        targetAgentCombo.setItems(comboItems);
+        if (selected != null && comboItems.contains(selected)) targetAgentCombo.setValue(selected); else targetAgentCombo.setValue(ALL_AGENTS);
+    }
+
     private void checkSingleAgentHealth(Agent agent) {
         String ip = agent.getIp(); if ("localhost".equals(ip) || "127.0.0.1".equals(ip)) return;
         HttpRequest req = HttpRequest.newBuilder().uri(URI.create("http://" + ip + ":9876/ping")).GET().build();
@@ -139,9 +361,18 @@ public class MainController {
                 if (body.startsWith("pong")) {
                     agent.setStatus("Online");
                     String[] parts = body.split("\\|");
-                    if (parts.length > 1) { String userRaw = parts[1].trim(); if (userRaw.contains("\\")) { String[] up = userRaw.split("\\\\"); agent.setUser(up[1]); agent.setName(up[0]); } else agent.setUser(userRaw); }
-                    if (parts.length > 2 && agent.getName().equals("Checking...")) agent.setName(parts[2].trim());
+                    boolean infoChanged = false;
+                    if (parts.length > 1) {
+                        String userRaw = parts[1].trim();
+                        if (userRaw.contains("\\")) {
+                            String[] up = userRaw.split("\\\\");
+                            if (!agent.getUser().equals(up[1])) { agent.setUser(up[1]); infoChanged = true; }
+                            if (!agent.getName().equals(up[0])) { agent.setName(up[0]); infoChanged = true; }
+                        } else if (!agent.getUser().equals(userRaw)) { agent.setUser(userRaw); infoChanged = true; }
+                    }
+                    if (parts.length > 2 && "Checking...".equals(agent.getName())) { agent.setName(parts[2].trim()); infoChanged = true; }
                     agent.lastSeenProperty().set(LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss")));
+                    if (infoChanged) saveAgents();
                 }
             } else agent.setStatus("Error");
             agentTableView.refresh(); updateActiveAgentsCount();
@@ -151,174 +382,42 @@ public class MainController {
     @FXML private void handleScanNetwork() {
         if (scanStatusLabel != null) scanStatusLabel.setText("Scanning all local networks...");
         Task<List<String>> scanTask = new Task<>() { @Override protected List<String> call() throws Exception { return networkScanner.scanAllNetworks(); } };
-        scanTask.setOnSucceeded(e -> { List<String> foundIps = scanTask.getValue(); for (String ip : foundIps) addAgentIfNotExists(ip, "Online"); if (scanStatusLabel != null) scanStatusLabel.setText("Scan complete. Found " + foundIps.size() + " agents."); updateActiveAgentsCount(); });
+        scanTask.setOnSucceeded(e -> { List<String> foundIps = scanTask.getValue(); boolean newAgent = false; for (String ip : foundIps) if (addAgentIfNotExists(ip, "Online")) newAgent = true; if(newAgent) saveAgents(); if (scanStatusLabel != null) scanStatusLabel.setText("Scan complete. Found " + foundIps.size() + " agents."); updateActiveAgentsCount(); });
         scanTask.setOnFailed(e -> { if (scanStatusLabel != null) scanStatusLabel.setText("Scan failed."); e.getSource().getException().printStackTrace(); }); new Thread(scanTask).start();
     }
-    @FXML private void handleAddAgent() { String ip = agentIpField.getText().trim(); if (!ip.isEmpty()) { addAgentIfNotExists(ip, "Unknown"); agentIpField.clear(); checkAllAgentsHealth(); } }
-    private boolean addAgentIfNotExists(String ip, String initialStatus) { for (Agent a : agentList) if (a.getIp().equals(ip)) { a.setStatus("Online"); return false; } String name = ip.equals("127.0.0.1") ? "LOCAL-HOST" : "Checking..."; String user = "Checking..."; agentList.add(new Agent(name, ip, initialStatus, user, LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss")))); return true; }
+    @FXML private void handleAddAgent() { String ip = agentIpField.getText().trim(); if (!ip.isEmpty()) { if (addAgentIfNotExists(ip, "Unknown")) saveAgents(); agentIpField.clear(); checkAllAgentsHealth(); } }
+    private boolean addAgentIfNotExists(String ip, String initialStatus) { for (Agent a : agentList) if (a.getIp().equals(ip)) { if ("Online".equals(initialStatus)) a.setStatus("Online"); return false; } String name = ip.equals("127.0.0.1") ? "LOCAL-HOST" : "Checking..."; String user = "Checking..."; agentList.add(new Agent(name, ip, initialStatus, user, LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss")))); return true; }
     private void updateActiveAgentsCount() { lblActiveAgents.setText(String.valueOf(agentList.stream().filter(a -> "Online".equals(a.getStatus())).count())); }
-
-    @FXML private void switchView(javafx.event.ActionEvent event) {
-        if (event.getSource() == btnDashboard) { dashboardView.setVisible(true); logExplorerView.setVisible(false); btnDashboard.getStyleClass().add("active"); btnLogExplorer.getStyleClass().remove("active"); }
-        else if (event.getSource() == btnLogExplorer) { dashboardView.setVisible(false); logExplorerView.setVisible(true); btnDashboard.getStyleClass().remove("active"); btnLogExplorer.getStyleClass().add("active"); }
-    }
-
-    private void switchToLogExplorer(Agent agent) {
-        dashboardView.setVisible(false); logExplorerView.setVisible(true); btnDashboard.getStyleClass().remove("active"); btnLogExplorer.getStyleClass().add("active");
-
-        // Chọn Agent tương ứng trong ComboBox
-        // Vì 'agent' có thể là đối tượng trong list, ta chọn nó
-        targetAgentCombo.setValue(agent);
-
-        handleGetLogs();
-    }
-
-    // --- LOG EXPLORER ---
-    private void setupLogExplorer() {
-        logChannelComboBox.setItems(FXCollections.observableArrayList("Microsoft-Windows-Sysmon/Operational", "Application", "Security", "System"));
-        logChannelComboBox.setValue("Microsoft-Windows-Sysmon/Operational");
-
-        // Config ComboBox display
-        targetAgentCombo.setConverter(new StringConverter<Agent>() {
-            @Override
-            public String toString(Agent agent) {
-                if (agent == null) return "";
-                if ("ALL".equals(agent.getIp())) return "All Agents";
-                return agent.getName() + " (" + agent.getIp() + ")";
-            }
-            @Override
-            public Agent fromString(String string) { return null; }
-        });
-
-        eventIdColumn.setCellValueFactory(new PropertyValueFactory<>("eventId"));
-        timeColumn.setCellValueFactory(new PropertyValueFactory<>("timeCreated"));
-        providerColumn.setCellValueFactory(new PropertyValueFactory<>("providerName"));
-        levelColumn.setCellValueFactory(new PropertyValueFactory<>("level"));
-        descriptionColumn.setCellValueFactory(new PropertyValueFactory<>("description"));
-        userColumn.setCellValueFactory(new PropertyValueFactory<>("user"));
-        hostColumn.setCellValueFactory(new PropertyValueFactory<>("host"));
-
-        logTableView.setRowFactory(tv -> { TableRow<LogEvent> row = new TableRow<>(); row.setOnMouseClicked(event -> { if (event.getClickCount() == 2 && (!row.isEmpty())) showLogDetails(row.getItem()); }); return row; });
-
-        filteredLogList = new FilteredList<>(masterLogList, p -> true);
-        SortedList<LogEvent> sortedData = new SortedList<>(filteredLogList);
-        sortedData.comparatorProperty().bind(logTableView.comparatorProperty());
-        logTableView.setItems(sortedData);
-
-        filterUserField.textProperty().addListener((observable, oldValue, newValue) -> updateFilters());
-        filterEventIdField.textProperty().addListener((observable, oldValue, newValue) -> updateFilters());
-        filterStartDate.valueProperty().addListener((observable, oldValue, newValue) -> updateFilters());
-        filterEndDate.valueProperty().addListener((observable, oldValue, newValue) -> updateFilters());
-
-        autoRefreshTimeline = new Timeline(new KeyFrame(Duration.seconds(10), e -> handleGetLogs())); autoRefreshTimeline.setCycleCount(Timeline.INDEFINITE);
-        autoRefreshToggle.selectedProperty().addListener((obs, oldVal, newVal) -> { if (newVal) autoRefreshTimeline.play(); else autoRefreshTimeline.stop(); });
-    }
-
+    private void switchToLogExplorer(Agent agent) { dashboardView.setVisible(false); logExplorerView.setVisible(true); rulesView.setVisible(false); btnDashboard.getStyleClass().remove("active"); btnLogExplorer.getStyleClass().add("active"); btnRules.getStyleClass().remove("active"); targetAgentCombo.setValue(agent); handleGetLogs(); }
     private void updateFilters() {
-        String userFilter = filterUserField.getText().toLowerCase();
-        String eventIdFilter = filterEventIdField.getText().toLowerCase();
-        LocalDate startDate = filterStartDate.getValue();
-        LocalDate endDate = filterEndDate.getValue();
-
+        String userFilter = filterUserField.getText().toLowerCase(); String eventIdFilter = filterEventIdField.getText().toLowerCase(); LocalDate startDate = filterStartDate.getValue(); LocalDate endDate = filterEndDate.getValue();
         filteredLogList.setPredicate(log -> {
             if (!userFilter.isEmpty() && (log.getUser() == null || !log.getUser().toLowerCase().contains(userFilter))) return false;
             if (!eventIdFilter.isEmpty() && !log.getEventId().equals(eventIdFilter)) return false;
-            if (startDate != null || endDate != null) {
-                try {
-                    String logDateStr = log.getTimeCreated().substring(0, 10);
-                    LocalDate logDate = LocalDate.parse(logDateStr);
-                    if (startDate != null && logDate.isBefore(startDate)) return false;
-                    if (endDate != null && logDate.isAfter(endDate)) return false;
-                } catch (Exception e) {}
-            }
+            if (startDate != null || endDate != null) { try { String logDateStr = log.getTimeCreated().substring(0, 10); LocalDate logDate = LocalDate.parse(logDateStr); if (startDate != null && logDate.isBefore(startDate)) return false; if (endDate != null && logDate.isAfter(endDate)) return false; } catch (Exception e) {} }
             return true;
         });
     }
-
-    @FXML private void handleResetFilters() {
-        filterUserField.clear(); filterEventIdField.clear(); filterStartDate.setValue(null); filterEndDate.setValue(null);
-    }
-
-    @FXML
-    private void handleGetLogs() {
-        Agent selectedTarget = targetAgentCombo.getValue();
-        final boolean fetchAll;
-        final String targetIp;
-
-        if (selectedTarget == null || "ALL".equals(selectedTarget.getIp())) {
-            fetchAll = true;
-            targetIp = "ALL";
-        } else {
-            fetchAll = false;
-            targetIp = selectedTarget.getIp();
-        }
-
-        String logChannel = logChannelComboBox.getValue();
-        LogRequest request = new LogRequest();
-        request.setLogChannel(logChannel);
-
-        Task<List<LogEvent>> task = new Task<>() {
-            @Override
-            protected List<LogEvent> call() throws Exception {
-                List<LogEvent> allLogs = new ArrayList<>();
-                ExecutorService executor = Executors.newFixedThreadPool(10);
-                List<Future<List<LogEvent>>> futures = new ArrayList<>();
-
-                for (Agent agent : agentList) {
-                    if ("Offline".equals(agent.getStatus())) continue;
-
-                    // Logic Lọc Target: Nếu không phải ALL và IP không trùng thì bỏ qua
-                    if (!fetchAll && !agent.getIp().equals(targetIp)) continue;
-
-                    Callable<List<LogEvent>> job = () -> {
-                        try {
-                            if ("127.0.0.1".equals(agent.getIp())) {
-                                return fetchLocalLogs(request);
-                            } else {
-                                return fetchRemoteLogs(request, "http://" + agent.getIp() + ":9876");
-                            }
-                        } catch (Exception e) {
-                            return new ArrayList<>();
-                        }
-                    };
-                    futures.add(executor.submit(job));
-                }
-
-                for (Future<List<LogEvent>> f : futures) {
-                    try { allLogs.addAll(f.get()); } catch (Exception e) { e.printStackTrace(); }
-                }
-                executor.shutdown();
-                allLogs.sort((o1, o2) -> o2.getTimeCreated().compareTo(o1.getTimeCreated()));
-                return allLogs;
+    @FXML private void handleResetFilters() { filterUserField.clear(); filterEventIdField.clear(); filterStartDate.setValue(null); filterEndDate.setValue(null); }
+    @FXML private void handleClearTarget() { targetAgentCombo.setValue(ALL_AGENTS); }
+    @FXML private void handleGetLogs() {
+        Agent selectedTarget = targetAgentCombo.getValue(); final boolean fetchAll; final String targetIp;
+        if (selectedTarget == null || "ALL".equals(selectedTarget.getIp())) { fetchAll = true; targetIp = "ALL"; } else { fetchAll = false; targetIp = selectedTarget.getIp(); }
+        String logChannel = logChannelComboBox.getValue(); LogRequest request = new LogRequest(); request.setLogChannel(logChannel);
+        Task<List<LogEvent>> task = new Task<>() { @Override protected List<LogEvent> call() throws Exception {
+            List<LogEvent> allLogs = new ArrayList<>(); ExecutorService executor = Executors.newFixedThreadPool(10); List<Future<List<LogEvent>>> futures = new ArrayList<>();
+            for (Agent agent : agentList) { if ("Offline".equals(agent.getStatus())) continue; if (!fetchAll && !agent.getIp().equals(targetIp)) continue;
+                Callable<List<LogEvent>> job = () -> { try { if ("127.0.0.1".equals(agent.getIp())) return fetchLocalLogs(request); else return fetchRemoteLogs(request, "http://" + agent.getIp() + ":9876"); } catch (Exception e) { return new ArrayList<>(); } };
+                futures.add(executor.submit(job));
             }
-        };
-
-        task.setOnSucceeded(e -> {
-            masterLogList.setAll(task.getValue());
-            loadingIndicator.setVisible(false);
-        });
-
-        task.setOnFailed(e -> {
-            loadingIndicator.setVisible(false);
-            showError("Fetch Error", "Error collecting logs", task.getException());
-        });
-
-        loadingIndicator.setVisible(true);
-        new Thread(task).start();
+            for (Future<List<LogEvent>> f : futures) { try { allLogs.addAll(f.get()); } catch (Exception e) { e.printStackTrace(); } }
+            executor.shutdown(); allLogs.sort((o1, o2) -> o2.getTimeCreated().compareTo(o1.getTimeCreated())); return allLogs;
+        }};
+        task.setOnSucceeded(e -> { masterLogList.setAll(task.getValue()); loadingIndicator.setVisible(false); });
+        task.setOnFailed(e -> { loadingIndicator.setVisible(false); showError("Fetch Error", "Error collecting logs", task.getException()); }); loadingIndicator.setVisible(true); new Thread(task).start();
     }
-
-    private List<LogEvent> fetchLocalLogs(LogRequest request) throws Exception {
-        List<String> command = new ArrayList<>(); command.add("wevtutil"); command.add("qe"); command.add(request.getLogChannel()); command.add("/rd:true"); command.add("/f:xml");
-        ProcessBuilder pb = new ProcessBuilder(command); pb.redirectErrorStream(true); Process process = pb.start();
-        StringBuilder xmlOutput = new StringBuilder(); try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) { String line; while ((line = reader.readLine()) != null) xmlOutput.append(line).append(System.lineSeparator()); }
-        int exitCode = process.waitFor(); if (exitCode != 0) throw new RuntimeException("Local error: " + xmlOutput);
-        return parseLogEvents(xmlOutput.toString());
-    }
-    private List<LogEvent> fetchRemoteLogs(LogRequest request, String hostUrl) throws Exception {
-        String jsonBody = jsonMapper.writeValueAsString(request); HttpRequest req = HttpRequest.newBuilder().uri(URI.create(hostUrl + "/get-logs")).header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(jsonBody)).build();
-        HttpResponse<String> res = httpClient.send(req, HttpResponse.BodyHandlers.ofString()); if (res.statusCode() != 200) throw new RuntimeException("Remote Error: " + res.body());
-        return parseLogEvents(res.body());
-    }
+    private List<LogEvent> fetchLocalLogs(LogRequest request) throws Exception { List<String> command = new ArrayList<>(); command.add("wevtutil"); command.add("qe"); command.add(request.getLogChannel()); command.add("/rd:true"); command.add("/f:xml"); ProcessBuilder pb = new ProcessBuilder(command); pb.redirectErrorStream(true); Process process = pb.start(); StringBuilder xmlOutput = new StringBuilder(); try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) { String line; while ((line = reader.readLine()) != null) xmlOutput.append(line).append(System.lineSeparator()); } int exitCode = process.waitFor(); if (exitCode != 0) throw new RuntimeException("Local error: " + xmlOutput); return parseLogEvents(xmlOutput.toString()); }
+    private List<LogEvent> fetchRemoteLogs(LogRequest request, String hostUrl) throws Exception { String jsonBody = jsonMapper.writeValueAsString(request); HttpRequest req = HttpRequest.newBuilder().uri(URI.create(hostUrl + "/get-logs")).header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(jsonBody)).build(); HttpResponse<String> res = httpClient.send(req, HttpResponse.BodyHandlers.ofString()); if (res.statusCode() != 200) throw new RuntimeException("Remote Error: " + res.body()); return parseLogEvents(res.body()); }
     private List<LogEvent> parseLogEvents(String xmlOutput) throws Exception {
         List<LogEvent> events = new ArrayList<>(); if (xmlOutput == null || xmlOutput.trim().isEmpty()) return events;
         String validXml = "<Events>" + xmlOutput + "</Events>";
@@ -344,10 +443,15 @@ public class MainController {
                 fullDetails = sb.toString().trim();
             }
             String description = fullDetails.split("\n")[0] + " [...]";
-            events.add(new LogEvent(eventId, timeCreated, providerName, level, description, user, computer, fullDetails));
+            LogEvent log = new LogEvent(eventId, timeCreated, providerName, level, description, user, computer, fullDetails);
+            applyRules(log);
+            events.add(log);
         }
         return events;
     }
+
+    // Đã xóa hàm applyRules() bị trùng ở đây
+
     private void showLogDetails(LogEvent logEvent) { Alert alert = new Alert(Alert.AlertType.INFORMATION); alert.setTitle("Details"); alert.setHeaderText(logEvent.getEventId()); TextArea area = new TextArea(logEvent.getFullDetails()); area.setEditable(false); area.setWrapText(true); GridPane.setVgrow(area, Priority.ALWAYS); GridPane.setHgrow(area, Priority.ALWAYS); GridPane content = new GridPane(); content.add(area, 0, 0); content.setMaxWidth(Double.MAX_VALUE); alert.getDialogPane().setExpandableContent(content); alert.getDialogPane().setExpanded(true); alert.showAndWait(); }
     private void showError(String t, String h, Throwable ex) { Platform.runLater(() -> { Alert a = new Alert(Alert.AlertType.ERROR); a.setTitle(t); a.setHeaderText(h); a.setContentText(ex.getMessage()); a.showAndWait(); }); }
 }
