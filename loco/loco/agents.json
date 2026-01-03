@@ -3,4 +3,9 @@
   "ip" : "192.168.30.129",
   "name" : "DESKTOP-N5OFU1G",
   "user" : "vuduc"
+}, {
+  "lastSeen" : "00:10:50",
+  "ip" : "192.168.30.134",
+  "name" : "MOCK-WIN-SERVER",
+  "user" : "Administrator"
 } ]

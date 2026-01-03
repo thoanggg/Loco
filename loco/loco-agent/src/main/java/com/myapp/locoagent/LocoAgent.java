@@ -17,9 +17,13 @@ public class LocoAgent {
 
         app.get("/ping", ctx -> {
             String hostName = "Unknown";
-            try { hostName = InetAddress.getLocalHost().getHostName(); } catch (Exception e) {}
+            try {
+                hostName = InetAddress.getLocalHost().getHostName();
+            } catch (Exception e) {
+            }
             String realUser = getActiveUser();
-            if (realUser.isEmpty()) realUser = System.getProperty("user.name");
+            if (realUser.isEmpty())
+                realUser = System.getProperty("user.name");
             ctx.result("pong|" + realUser + "|" + hostName);
         });
 
@@ -42,23 +46,38 @@ public class LocoAgent {
         try {
             Process p = Runtime.getRuntime().exec("wmic computersystem get username");
             BufferedReader input = new BufferedReader(new InputStreamReader(p.getInputStream()));
-            String line; String user = "";
+            String line;
+            String user = "";
             while ((line = input.readLine()) != null) {
                 line = line.trim();
-                if (!line.isEmpty() && !line.equalsIgnoreCase("UserName")) { user = line; break; }
+                if (!line.isEmpty() && !line.equalsIgnoreCase("UserName")) {
+                    user = line;
+                    break;
+                }
             }
-            input.close(); return user;
-        } catch (Exception e) { return ""; }
+            input.close();
+            return user;
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     private static String runWevtutil(LogRequest request) throws Exception {
+        // SECURITY FIX: Validate channel name to prevent command injection
+        String channel = request.getLogChannel();
+        if (!isValidChannel(channel)) {
+            throw new IllegalArgumentException("Invalid log channel: " + channel);
+        }
+
         List<String> command = new ArrayList<>();
         command.add("wevtutil");
         command.add("qe");
-        command.add(request.getLogChannel());
-        // BỎ /c: (Lấy toàn bộ)
-        // BỎ /q: (Bỏ XPath)
-        command.add("/rd:true"); // Mới nhất trước
+        command.add(channel);
+
+        // TODO: Implement incremental fetching by using /q: with TimeCreated
+        // For now, allow limiting count to prevent hang
+        command.add("/c:100"); // Limit to 100 recent events for performance
+        command.add("/rd:true"); // Newest first
         command.add("/f:xml");
 
         ProcessBuilder pb = new ProcessBuilder(command);
@@ -74,8 +93,18 @@ public class LocoAgent {
         }
 
         int exitCode = process.waitFor();
-        if (exitCode != 0) throw new RuntimeException("Exit code " + exitCode);
+        if (exitCode != 0)
+            throw new RuntimeException("Exit code " + exitCode + ": " + xmlOutput);
 
         return xmlOutput.toString();
+    }
+
+    private static boolean isValidChannel(String channel) {
+        // Whitelist allowed channels
+        List<String> allowed = List.of(
+                "Application", "System", "Security", "Setup",
+                "Microsoft-Windows-Sysmon/Operational",
+                "Microsoft-Windows-PowerShell/Operational");
+        return allowed.contains(channel) || channel.matches("^[a-zA-Z0-9\\-]+(/[a-zA-Z0-9\\-]+)?$");
     }
 }

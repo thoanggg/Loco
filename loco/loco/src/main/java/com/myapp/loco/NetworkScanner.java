@@ -11,6 +11,7 @@ public class NetworkScanner {
 
     /**
      * Quét TẤT CẢ các dải mạng nội bộ tìm thấy trên máy tính.
+     * 
      * @return Danh sách các IP của Agent tìm thấy.
      */
     public List<String> scanAllNetworks() {
@@ -58,12 +59,14 @@ public class NetworkScanner {
         try {
             Enumeration<NetworkInterface> nets = NetworkInterface.getNetworkInterfaces();
             for (NetworkInterface netint : Collections.list(nets)) {
-                if (netint.isLoopback() || !netint.isUp()) continue;
+                if (netint.isLoopback() || !netint.isUp())
+                    continue;
 
                 Enumeration<InetAddress> inetAddresses = netint.getInetAddresses();
                 for (InetAddress inetAddress : Collections.list(inetAddresses)) {
                     // Chỉ lấy địa chỉ IPv4 nội bộ (Site Local)
-                    if (inetAddress.isSiteLocalAddress() && !inetAddress.isLoopbackAddress() && !inetAddress.getHostAddress().contains(":")) {
+                    if (inetAddress.isSiteLocalAddress() && !inetAddress.isLoopbackAddress()
+                            && !inetAddress.getHostAddress().contains(":")) {
                         String ip = inetAddress.getHostAddress();
                         int lastDot = ip.lastIndexOf('.');
                         if (lastDot > 0) {
@@ -80,6 +83,7 @@ public class NetworkScanner {
         if (subnets.isEmpty()) {
             subnets.add("192.168.1");
             subnets.add("192.168.0");
+            subnets.add("10.0.0"); // Common in enterprise/cloud
         }
         return subnets;
     }

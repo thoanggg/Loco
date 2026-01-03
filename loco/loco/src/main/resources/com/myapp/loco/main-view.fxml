@@ -29,6 +29,7 @@
                 <Button fx:id="btnLogExplorer" text="🔍 Log Explorer" maxWidth="Infinity" styleClass="menu-button" onAction="#switchView" />
                 <!-- THÊM MỚI: Nút Rules -->
                 <Button fx:id="btnRules" text="⚡ Rules Engine" maxWidth="Infinity" styleClass="menu-button" onAction="#switchView" />
+                <Button fx:id="btnAnalyze" text="📊 Analyze" maxWidth="Infinity" styleClass="menu-button" onAction="#switchView" />
 
                 <Button text="⚙️ Settings" maxWidth="Infinity" styleClass="menu-button" />
             </VBox>
@@ -150,6 +151,25 @@
                         <TableColumn fx:id="ruleActionCol" text="Action" />
                     </columns>
                 </TableView>
+            </VBox>
+
+            <!-- VIEW 4: ANALYSIS (MỚI) -->
+            <VBox fx:id="analyzeView" spacing="20.0" visible="false">
+                <Label text="Security Analysis" styleClass="content-header"/>
+                
+                <HBox spacing="20.0" VBox.vgrow="ALWAYS">
+                    <VBox styleClass="card" HBox.hgrow="ALWAYS">
+                        <Label text="Alert Severity Distribution" styleClass="card-title"/>
+                        <javafx.scene.chart.PieChart fx:id="alertSeverityChart" title="Alerts by Severity" />
+                    </VBox>
+                    <VBox styleClass="card" HBox.hgrow="ALWAYS">
+                        <Label text="Events by Agent" styleClass="card-title"/>
+                        <javafx.scene.chart.BarChart fx:id="eventsByAgentChart" title="Events per Agent">
+                            <xAxis><javafx.scene.chart.CategoryAxis label="Agent" /></xAxis>
+                            <yAxis><javafx.scene.chart.NumberAxis label="Count" /></yAxis>
+                        </javafx.scene.chart.BarChart>
+                    </VBox>
+                </HBox>
             </VBox>
 
         </StackPane>
