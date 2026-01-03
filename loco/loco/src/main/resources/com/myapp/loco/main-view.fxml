@@ -22,11 +22,11 @@
     <!-- SIDEBAR -->
     <left>
         <VBox prefWidth="220.0" styleClass="sidebar">
-            <Label text="🛡️ LOCO SECURITY" styleClass="app-title" />
+            <Label text="LOCO SECURITY" styleClass="app-title" />
             <VBox spacing="5.0" VBox.vgrow="ALWAYS">
                 <padding><Insets top="20"/></padding>
-                <Button fx:id="btnDashboard" text="🏠 Dashboard" maxWidth="Infinity" styleClass="menu-button, active" onAction="#switchView" />
-                <Button fx:id="btnLogExplorer" text="🔍 Log Explorer" maxWidth="Infinity" styleClass="menu-button" onAction="#switchView" />
+                <Button fx:id="btnDashboard" text="Dashboard" maxWidth="Infinity" styleClass="menu-button, active" onAction="#switchView" />
+                <Button fx:id="btnLogExplorer" text="Log Explorer" maxWidth="Infinity" styleClass="menu-button" onAction="#switchView" />
                 <!-- THÊM MỚI: Nút Rules -->
                 <Button fx:id="btnRules" text="⚡ Rules Engine" maxWidth="Infinity" styleClass="menu-button" onAction="#switchView" />
 
