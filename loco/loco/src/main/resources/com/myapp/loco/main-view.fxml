@@ -170,6 +170,18 @@
                         </javafx.scene.chart.BarChart>
                     </VBox>
                 </HBox>
+
+                <Label text="Recent Detections" styleClass="content-header"/>
+                <TableView fx:id="alertTableView" VBox.vgrow="ALWAYS">
+                    <columnResizePolicy><TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/></columnResizePolicy>
+                     <columns>
+                        <TableColumn fx:id="colAlertSeverity" text="Severity" />
+                        <TableColumn fx:id="colAlertDetection" text="Detection" />
+                        <TableColumn fx:id="colAlertDate" text="Date" />
+                        <TableColumn fx:id="colAlertHost" text="Host" />
+                        <TableColumn fx:id="colAlertStatus" text="Status" />
+                    </columns>
+                </TableView>
             </VBox>
 
         </StackPane>

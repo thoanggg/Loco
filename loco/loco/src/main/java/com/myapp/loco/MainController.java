@@ -76,6 +76,18 @@ public class MainController {
     private PieChart alertSeverityChart;
     @FXML
     private BarChart<String, Number> eventsByAgentChart;
+    @FXML
+    private TableView<LogEvent> alertTableView;
+    @FXML
+    private TableColumn<LogEvent, String> colAlertSeverity;
+    @FXML
+    private TableColumn<LogEvent, String> colAlertDetection;
+    @FXML
+    private TableColumn<LogEvent, String> colAlertDate;
+    @FXML
+    private TableColumn<LogEvent, String> colAlertHost;
+    @FXML
+    private TableColumn<LogEvent, Button> colAlertStatus;
 
     // --- Dashboard UI ---
     @FXML
@@ -189,7 +201,9 @@ public class MainController {
     public void initialize() {
         setupDashboard();
         setupLogExplorer();
+        setupLogExplorer();
         setupRulesEngine(); // Init Rules
+        setupAlertTable(); // Init Alert Table
 
         loadSavedAgents();
         loadSavedAgents();
@@ -296,6 +310,7 @@ public class MainController {
             if (match) {
                 event.setAlert(true);
                 event.setAlertSeverity(rule.getSeverity());
+                event.setDetectionName(rule.getName()); // Set Detection Name
                 totalAlertCount++;
                 Platform.runLater(() -> lblTotalAlerts.setText(String.valueOf(totalAlertCount)));
                 break;
@@ -707,6 +722,115 @@ public class MainController {
             eventsByAgentChart.getData().clear();
             eventsByAgentChart.getData().add(series);
         }
+
+        // Update Alert Table
+        if (alertTableView != null) {
+            ObservableList<LogEvent> alerts = FXCollections.observableArrayList();
+            for (LogEvent log : masterLogList) {
+                if (log.isAlert())
+                    alerts.add(log);
+            }
+            alertTableView.setItems(alerts);
+        }
+    }
+
+    private void setupAlertTable() {
+        if (alertTableView == null)
+            return;
+
+        colAlertSeverity.setCellValueFactory(new PropertyValueFactory<>("alertSeverity"));
+        colAlertSeverity.setCellFactory(column -> new TableCell<>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    setStyle("");
+                } else {
+                    setText("● " + item);
+                    if ("High".equals(item))
+                        setStyle("-fx-text-fill: #ef5350; -fx-font-weight: bold;"); // Red
+                    else if ("Medium".equals(item))
+                        setStyle("-fx-text-fill: #ffa726; -fx-font-weight: bold;"); // Orange
+                    else if ("Low".equals(item))
+                        setStyle("-fx-text-fill: #ffee58; -fx-font-weight: bold;"); // Yellow
+                    else
+                        setStyle("-fx-text-fill: white;");
+                }
+            }
+        });
+
+        colAlertDetection.setCellValueFactory(new PropertyValueFactory<>("detectionName"));
+        colAlertHost.setCellValueFactory(new PropertyValueFactory<>("host"));
+
+        // Date Formatter: "Nov 27th 2025 at 21:11"
+        colAlertDate.setCellValueFactory(new PropertyValueFactory<>("timeCreated"));
+        colAlertDate.setCellFactory(column -> new TableCell<>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null)
+                    setText(null);
+                else {
+                    try {
+                        // Original: 2023-11-27T21:11:00... or similar ISO
+                        // Assuming input is ISO-like or standard
+                        LocalDateTime dt = LocalDateTime.parse(item.substring(0, 19)); // Simple parse fallback
+                        // Custom format
+                        String month = dt.getMonth().name().substring(0, 1).toUpperCase()
+                                + dt.getMonth().name().substring(1, 3).toLowerCase();
+                        int day = dt.getDayOfMonth();
+                        String suffix = "th";
+                        if (day % 10 == 1 && day != 11)
+                            suffix = "st";
+                        else if (day % 10 == 2 && day != 12)
+                            suffix = "nd";
+                        else if (day % 10 == 3 && day != 13)
+                            suffix = "rd";
+
+                        String formatted = String.format("%s %d%s %d at %02d:%02d",
+                                month, day, suffix, dt.getYear(), dt.getHour(), dt.getMinute());
+                        setText(formatted);
+                    } catch (Exception e) {
+                        setText(item);
+                    } // Fallback
+                }
+            }
+        });
+
+        colAlertStatus.setCellValueFactory(param -> {
+            Button btn = new Button(param.getValue().getStatus());
+            btn.getStyleClass().add("status-badge-offline"); // Default grey/red look
+            if ("Acknowledged".equals(param.getValue().getStatus())) {
+                btn.setStyle("-fx-background-color: rgba(76, 175, 80, 0.2); -fx-text-fill: #66bb6a;");
+            } else {
+                btn.setStyle("-fx-background-color: rgba(150, 150, 150, 0.2); -fx-text-fill: #cfd8dc;");
+            }
+
+            btn.setOnAction(event -> {
+                LogEvent log = param.getValue();
+                if ("Not Acknowledged".equals(log.getStatus())) {
+                    log.setStatus("Acknowledged");
+                    btn.setText("Acknowledged");
+                    btn.setStyle("-fx-background-color: rgba(76, 175, 80, 0.2); -fx-text-fill: #66bb6a;");
+                } else {
+                    log.setStatus("Not Acknowledged");
+                    btn.setText("Not Acknowledged");
+                    btn.setStyle("-fx-background-color: rgba(150, 150, 150, 0.2); -fx-text-fill: #cfd8dc;");
+                }
+            });
+            return new SimpleObjectProperty<>(btn);
+        });
+
+        // Row Click for Details
+        alertTableView.setRowFactory(tv -> {
+            TableRow<LogEvent> row = new TableRow<>();
+            row.setOnMouseClicked(event -> {
+                if (event.getClickCount() == 1 && (!row.isEmpty()))
+                    showLogDetails(row.getItem());
+            });
+            return row;
+        });
     }
 
     @FXML
