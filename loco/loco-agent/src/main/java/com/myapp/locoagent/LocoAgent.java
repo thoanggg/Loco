@@ -17,23 +17,39 @@ public class LocoAgent {
             config.jetty.modifyServer(server -> {
                 org.eclipse.jetty.util.ssl.SslContextFactory.Server sslContextFactory = new org.eclipse.jetty.util.ssl.SslContextFactory.Server();
 
-                // Load keystore from resources
                 try {
-                    String keystorePath = LocoAgent.class.getResource("/keystore.jks").toExternalForm();
-                    sslContextFactory.setKeyStorePath(keystorePath);
+                    // Load keystore from classpath (works inside JAR)
+                    java.security.KeyStore ks = java.security.KeyStore.getInstance("JKS");
+                    try (java.io.InputStream is = LocoAgent.class.getResourceAsStream("/keystore.jks")) {
+                        if (is == null) {
+                            throw new RuntimeException("Keystore file '/keystore.jks' not found in classpath.");
+                        }
+                        ks.load(is, "password123".toCharArray());
+                    }
+                    sslContextFactory.setKeyStore(ks);
                 } catch (Exception e) {
-                    // Fallback for dev if resource not found (e.g. running from IDE without
-                    // resources)
+                    System.err.println("CRITICAL: Failed to load keystore. " + e.getMessage());
+                    e.printStackTrace();
+                    // Fallback/Crash handled by caller usually, but we should exit or try file
                     sslContextFactory.setKeyStorePath("keystore.jks");
                 }
 
                 sslContextFactory.setKeyStorePassword("password123");
 
+                org.eclipse.jetty.server.HttpConfiguration httpsConfig = new org.eclipse.jetty.server.HttpConfiguration();
+                org.eclipse.jetty.server.SecureRequestCustomizer src = new org.eclipse.jetty.server.SecureRequestCustomizer();
+                src.setSniHostCheck(false); // Fix for "Invalid SNI" error
+                httpsConfig.addCustomizer(src);
+
+                org.eclipse.jetty.server.HttpConnectionFactory httpConnectionFactory = new org.eclipse.jetty.server.HttpConnectionFactory(
+                        httpsConfig);
+                org.eclipse.jetty.server.SslConnectionFactory sslConnectionFactory = new org.eclipse.jetty.server.SslConnectionFactory(
+                        sslContextFactory, org.eclipse.jetty.http.HttpVersion.HTTP_1_1.asString());
+
                 org.eclipse.jetty.server.ServerConnector sslConnector = new org.eclipse.jetty.server.ServerConnector(
-                        server, sslContextFactory);
+                        server, sslConnectionFactory, httpConnectionFactory);
                 sslConnector.setPort(9876);
                 server.setConnectors(new org.eclipse.jetty.server.Connector[] { sslConnector });
-                // server.addConnector(sslConnector);
             });
         }).start(); // Port argument is ignored if server is manually configured, but kept for
                     // clarity
@@ -63,6 +79,14 @@ public class LocoAgent {
                 e.printStackTrace();
             }
         });
+
+        // KEEP ALIVE: Prevents the main thread from exiting, which might cause the
+        // service wrapper to think the app stopped.
+        try {
+            Thread.currentThread().join();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
     }
 
     private static String getActiveUser() {

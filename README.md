@@ -59,7 +59,13 @@ cd loco
 ### 3. Run Agent (Windows)
 Copy the shaded JAR to the target Windows machine:
 ```cmd
-copy loco-agent/target/loco-agent-1.0-SNAPSHOT-shaded.jar C:\Tools\
-java -jar C:\Tools\loco-agent-1.0-SNAPSHOT-shaded.jar
-```
-*Output should indicate: `Starting loco-agent on port 9876 (HTTPS)...`*
+copy loco-agent/target/loco-agent-1.0-SNAPSHOT.jar C:\Tools\
+java -jar C:\Tools\loco-agent-1.0-SNAPSHOT.jar
+
+### 4. Run as Windows Service (Optional but Recommended)
+To run the agent in the background and auto-start with Windows:
+1.  Download **WinSW (Windows Service Wrapper)** from [WinSW Releases](https://github.com/winsw/winsw/releases) (e.g., `WinSW-x64.exe`).
+2.  Rename the downloaded file to **`loco-agent.exe`**.
+3.  Place `loco-agent.exe`, `loco-agent.xml`, and `install_service.bat` in the same folder as your JAR (`C:\Tools\`).
+4.  Right-click `install_service.bat` and **Run as Administrator**.
+    *   *To uninstall: Run `uninstall_service.bat` as Administrator.*

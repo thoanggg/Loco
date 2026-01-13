@@ -203,6 +203,8 @@ public class MainController {
     @FXML
     public void initialize() {
         setupDashboard();
+        // GLOBAL FIX: Disable strict hostname verification for the internal HttpClient
+        System.setProperty("jdk.internal.httpclient.disableHostnameVerification", "true");
         setupLogExplorer();
         setupLogExplorer();
         setupRulesEngine(); // Init Rules
@@ -553,11 +555,16 @@ public class MainController {
                     if (infoChanged)
                         saveAgents();
                 }
-            } else
-                agent.setStatus("Error");
+            } else {
+                System.err.println(
+                        "Health Check HTTP Error for " + ip + ": Code=" + res.statusCode() + ", Body=" + res.body());
+                agent.setStatus("Error: " + res.statusCode());
+            }
             agentTableView.refresh();
             updateActiveAgentsCount();
         })).exceptionally(ex -> {
+            // Log the error to console for debugging
+            System.err.println("Health Check Failed for " + ip + ": " + ex.getMessage());
             Platform.runLater(() -> {
                 agent.setStatus("Offline");
                 agentTableView.refresh();
@@ -973,8 +980,6 @@ public class MainController {
         return events;
     }
 
-    // Đã xóa hàm applyRules() bị trùng ở đây
-
     private void showLogDetails(LogEvent logEvent) {
         Alert alert = new Alert(Alert.AlertType.INFORMATION);
         alert.setTitle("Details");
@@ -1002,6 +1007,11 @@ public class MainController {
         });
     }
 
+    static {
+        System.setProperty("jdk.internal.httpclient.disableHostnameVerification", "true");
+        System.setProperty("jsse.enableSNIExtension", "false");
+    }
+
     private static HttpClient createInsecureHttpClient() {
         try {
             TrustManager[] trustAllCerts = new TrustManager[] {
@@ -1022,11 +1032,12 @@ public class MainController {
 
             // Disable hostname verification by not setting identification algorithm
             javax.net.ssl.SSLParameters sslParams = new javax.net.ssl.SSLParameters();
-            sslParams.setEndpointIdentificationAlgorithm("");
+            sslParams.setEndpointIdentificationAlgorithm(null);
 
             return HttpClient.newBuilder()
                     .version(HttpClient.Version.HTTP_1_1)
-                    .connectTimeout(java.time.Duration.ofSeconds(2))
+                    // Increased timeout to 10s to handle slow SSL handshakes on local network
+                    .connectTimeout(java.time.Duration.ofSeconds(10))
                     .sslContext(sc)
                     .sslParameters(sslParams)
                     .build();

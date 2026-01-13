@@ -8,4 +8,9 @@
   "ip" : "192.168.30.134",
   "name" : "MOCK-WIN-SERVER",
   "user" : "Administrator"
+}, {
+  "lastSeen" : "21:50:27",
+  "ip" : "192.168.30.1",
+  "name" : "thangvu",
+  "user" : "vuduc"
 } ]

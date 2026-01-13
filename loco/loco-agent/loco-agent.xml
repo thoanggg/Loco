@@ -1,0 +1,9 @@
+<service>
+  <id>LocoAgent</id>
+  <name>Loco Agent Service</name>
+  <description>Secure Log Collector Agent for Loco System.</description>
+  <executable>java</executable>
+  <arguments>-jar "%BASE%\loco-agent-1.0-SNAPSHOT.jar"</arguments>
+  <startmode>Automatic</startmode>
+  <log mode="roll"></log>
+</service>
