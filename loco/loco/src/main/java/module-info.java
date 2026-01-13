@@ -5,7 +5,9 @@ module com.myapp.loco {
     requires java.net.http;
 
     requires com.fasterxml.jackson.databind;
+    requires org.yaml.snakeyaml;
 
     opens com.myapp.loco to javafx.fxml, com.fasterxml.jackson.databind;
+
     exports com.myapp.loco;
 }

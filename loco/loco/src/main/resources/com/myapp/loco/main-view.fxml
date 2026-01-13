@@ -126,31 +126,36 @@
 
             <!-- VIEW 3: RULES ENGINE (MỚI) -->
             <VBox fx:id="rulesView" spacing="15.0" visible="false">
-                <Label text="Detection Rules Configuration" styleClass="content-header"/>
+                <Label text="Active System Rules (MITRE ATT&amp;CK / Sigma)" styleClass="card-title" />
+                
+                <javafx.scene.control.SplitPane orientation="VERTICAL" VBox.vgrow="ALWAYS" style="-fx-background-color: transparent;">
+                    <!-- Bảng danh sách luật -->
+                    <VBox spacing="5" VBox.vgrow="ALWAYS">
+                        <Label text="Active Rules" style="-fx-text-fill: white; -fx-font-weight: bold;"/>
+                        <TableView fx:id="rulesTableView" VBox.vgrow="ALWAYS">
+                            <columnResizePolicy><TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/></columnResizePolicy>
+                            <columns>
+                                <TableColumn fx:id="ruleNameCol" text="Rule Name" />
+                                <TableColumn fx:id="ruleFieldCol" text="MITRE ID" />
+                                <TableColumn fx:id="ruleConditionCol" text="Description" />
+                                <TableColumn fx:id="ruleSeverityCol" text="Severity" />
+                                <TableColumn fx:id="ruleValueCol" visible="false" />
+                            </columns>
+                        </TableView>
+                    </VBox>
 
-                <!-- Khu vực thêm luật -->
-                <HBox spacing="10.0" alignment="CENTER_LEFT" styleClass="card">
-                    <padding><Insets top="10" right="10" bottom="10" left="10"/></padding>
-                    <TextField fx:id="ruleNameField" promptText="Rule Name (e.g. Detect Mimikatz)" prefWidth="200"/>
-                    <ComboBox fx:id="ruleFieldCombo" prefWidth="120" promptText="Field"/>
-                    <ComboBox fx:id="ruleConditionCombo" prefWidth="100" promptText="Condition"/>
-                    <TextField fx:id="ruleValueField" promptText="Value to match" HBox.hgrow="ALWAYS"/>
-                    <ComboBox fx:id="ruleSeverityCombo" prefWidth="100" promptText="Severity"/>
-                    <Button text="Add Rule" onAction="#handleAddRule" styleClass="button-primary"/>
-                </HBox>
-
-                <!-- Bảng danh sách luật -->
-                <TableView fx:id="rulesTableView" VBox.vgrow="ALWAYS">
-                    <columnResizePolicy><TableView fx:constant="CONSTRAINED_RESIZE_POLICY"/></columnResizePolicy>
-                    <columns>
-                        <TableColumn fx:id="ruleNameCol" text="Rule Name" />
-                        <TableColumn fx:id="ruleFieldCol" text="Field" />
-                        <TableColumn fx:id="ruleConditionCol" text="Condition" />
-                        <TableColumn fx:id="ruleValueCol" text="Value" />
-                        <TableColumn fx:id="ruleSeverityCol" text="Severity" />
-                        <TableColumn fx:id="ruleActionCol" text="Action" />
-                    </columns>
-                </TableView>
+                    <!-- SIGMA EDITOR -->
+                    <VBox spacing="10" style="-fx-padding: 10;">
+                        <Label text="Detection-as-Code Editor (Sigma YAML)" style="-fx-text-fill: white; -fx-font-weight: bold;"/>
+                        <javafx.scene.control.TextArea fx:id="sigmaRuleEditor" promptText="Paste Sigma YAML Rule here..." prefRowCount="8"
+                                                       style="-fx-font-family: 'Consolas', 'Monospace';"/>
+                        <HBox spacing="10" alignment="CENTER_RIGHT">
+                            <Label text="Supported: title, id, level, detection.selection" style="-fx-text-fill: #999; -fx-font-size: 11px;"/>
+                            <Button text="📂 Load File" onAction="#handleLoadRuleFile" style="-fx-background-color: #555; -fx-text-fill: white;"/>
+                            <Button text="Import Rule" onAction="#handleImportRule" styleClass="button-primary"/>
+                        </HBox>
+                    </VBox>
+                </javafx.scene.control.SplitPane>
             </VBox>
 
             <!-- VIEW 4: ANALYSIS (MỚI) -->

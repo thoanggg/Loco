@@ -11,15 +11,17 @@ public class LogEvent {
     private final SimpleStringProperty user;
     private final SimpleStringProperty host;
     private final String fullDetails;
+    private final java.util.Map<String, String> eventData; // Structured data for Rules Engine
 
     // --- THÊM MỚI: Cờ đánh dấu Alert ---
     private boolean isAlert = false;
     private String alertSeverity = "";
     private String detectionName = "";
+    private String mitreId = ""; // Txxxx
     private final SimpleStringProperty status = new SimpleStringProperty("Not Acknowledged");
 
     public LogEvent(String eventId, String timeCreated, String providerName, String level, String description,
-            String user, String host, String fullDetails) {
+            String user, String host, String fullDetails, java.util.Map<String, String> eventData) {
         this.eventId = new SimpleStringProperty(eventId);
         this.timeCreated = new SimpleStringProperty(timeCreated);
         this.providerName = new SimpleStringProperty(providerName);
@@ -28,6 +30,7 @@ public class LogEvent {
         this.user = new SimpleStringProperty(user);
         this.host = new SimpleStringProperty(host);
         this.fullDetails = fullDetails;
+        this.eventData = eventData != null ? eventData : new java.util.HashMap<>();
     }
 
     public String getEventId() {
@@ -113,6 +116,18 @@ public class LogEvent {
 
     public void setDetectionName(String detectionName) {
         this.detectionName = detectionName;
+    }
+
+    public String getMitreId() {
+        return mitreId;
+    }
+
+    public void setMitreId(String mitreId) {
+        this.mitreId = mitreId;
+    }
+
+    public java.util.Map<String, String> getEventData() {
+        return eventData;
     }
 
     public String getStatus() {

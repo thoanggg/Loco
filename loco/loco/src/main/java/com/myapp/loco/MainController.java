@@ -22,6 +22,11 @@ import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
+import javafx.scene.layout.HBox;
+import javafx.stage.FileChooser;
+import javafx.scene.control.ContextMenu;
+import javafx.scene.control.MenuItem;
+import javafx.scene.control.TextArea;
 import javafx.util.Duration;
 import javafx.util.StringConverter;
 import org.w3c.dom.Document;
@@ -56,6 +61,8 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+
+import javafx.beans.property.SimpleStringProperty;
 
 public class MainController {
 
@@ -158,35 +165,26 @@ public class MainController {
 
     // --- Rules Engine UI (Mới) ---
     @FXML
-    private TextField ruleNameField;
+    private TableView<AdvancedRulesEngine.RuleMetadata> rulesTableView;
     @FXML
-    private ComboBox<String> ruleFieldCombo;
+    private TableColumn<AdvancedRulesEngine.RuleMetadata, String> ruleNameCol;
     @FXML
-    private ComboBox<String> ruleConditionCombo;
+    private TableColumn<AdvancedRulesEngine.RuleMetadata, String> ruleFieldCol;
     @FXML
-    private TextField ruleValueField;
+    private TableColumn<AdvancedRulesEngine.RuleMetadata, String> ruleConditionCol;
     @FXML
-    private ComboBox<String> ruleSeverityCombo;
+    private TableColumn<AdvancedRulesEngine.RuleMetadata, String> ruleValueCol;
     @FXML
-    private TableView<DetectionRule> rulesTableView;
-    @FXML
-    private TableColumn<DetectionRule, String> ruleNameCol;
-    @FXML
-    private TableColumn<DetectionRule, String> ruleFieldCol;
-    @FXML
-    private TableColumn<DetectionRule, String> ruleConditionCol;
-    @FXML
-    private TableColumn<DetectionRule, String> ruleValueCol;
-    @FXML
-    private TableColumn<DetectionRule, String> ruleSeverityCol;
-    @FXML
-    private TableColumn<DetectionRule, Button> ruleActionCol;
+    private TableColumn<AdvancedRulesEngine.RuleMetadata, String> ruleSeverityCol;
 
     // --- Data & Helpers ---
     private final ObservableList<Agent> agentList = FXCollections.observableArrayList();
     private final ObservableList<LogEvent> masterLogList = FXCollections.observableArrayList();
     private FilteredList<LogEvent> filteredLogList;
-    private final ObservableList<DetectionRule> rulesList = FXCollections.observableArrayList(); // Danh sách luật
+    private final ObservableList<DetectionRule> rulesList = FXCollections.observableArrayList(); // Legacy placeholder -
+                                                                                                 // will be updated
+    private final ObservableList<AdvancedRulesEngine.RuleMetadata> metadataList = FXCollections.observableArrayList(); // New
+                                                                                                                       // List
 
     private final Agent ALL_AGENTS = new Agent("All Agents", "ALL", "Virtual", "", "");
     private Timeline autoRefreshTimeline;
@@ -206,14 +204,10 @@ public class MainController {
         // GLOBAL FIX: Disable strict hostname verification for the internal HttpClient
         System.setProperty("jdk.internal.httpclient.disableHostnameVerification", "true");
         setupLogExplorer();
-        setupLogExplorer();
         setupRulesEngine(); // Init Rules
         setupAlertTable(); // Init Alert Table
 
         loadSavedAgents();
-        loadSavedAgents();
-        // REMOVED: addAgentIfNotExists("127.0.0.1", "Online"); // Admin is
-        // headless/Linux, no local agent by default
 
         updateActiveAgentsCount();
         updateTargetCombo();
@@ -230,97 +224,110 @@ public class MainController {
 
     // --- RULES ENGINE LOGIC ---
     private void setupRulesEngine() {
-        ruleNameCol.setCellValueFactory(new PropertyValueFactory<>("name"));
-        ruleFieldCol.setCellValueFactory(new PropertyValueFactory<>("field"));
-        ruleConditionCol.setCellValueFactory(new PropertyValueFactory<>("condition"));
-        ruleValueCol.setCellValueFactory(new PropertyValueFactory<>("value"));
-        ruleSeverityCol.setCellValueFactory(new PropertyValueFactory<>("severity"));
+        // Configure Columns for Read-Only Rules View
+        ruleNameCol.setCellValueFactory(cell -> new SimpleStringProperty(cell.getValue().getName()));
+        ruleFieldCol.setCellValueFactory(cell -> new SimpleStringProperty(cell.getValue().getMitreId()));
+        ruleConditionCol.setCellValueFactory(cell -> new SimpleStringProperty(cell.getValue().getDescription()));
+        ruleSeverityCol.setCellValueFactory(cell -> new SimpleStringProperty(cell.getValue().getSeverity()));
+        ruleValueCol.setVisible(false); // Hidden column
 
-        ruleActionCol.setCellValueFactory(param -> {
-            Button btn = new Button("Delete");
-            btn.setStyle("-fx-background-color: #ef5350; -fx-text-fill: white;");
-            btn.setOnAction(event -> rulesList.remove(param.getValue()));
-            return new SimpleObjectProperty<>(btn);
-        });
+        // Populate Table with Expert Rules
+        metadataList.setAll(AdvancedRulesEngine.getRules());
+        rulesTableView.setItems(metadataList);
 
-        rulesTableView.setItems(rulesList);
+        // Context Menu for Deletion
+        ContextMenu contextMenu = new ContextMenu();
+        MenuItem deleteItem = new MenuItem("Delete Rule");
+        deleteItem.setOnAction(e -> handleDeleteRule());
+        contextMenu.getItems().add(deleteItem);
+        rulesTableView.setContextMenu(contextMenu);
+    }
 
-        ruleFieldCombo.setItems(FXCollections.observableArrayList("Description", "EventID", "User", "Host"));
-        ruleConditionCombo.setItems(FXCollections.observableArrayList("Contains", "Equals", "Starts With"));
-        ruleSeverityCombo.setItems(FXCollections.observableArrayList("High", "Medium", "Low"));
+    private void handleDeleteRule() {
+        AdvancedRulesEngine.RuleMetadata selected = rulesTableView.getSelectionModel().getSelectedItem();
+        if (selected == null)
+            return;
 
-        // Default Rules (Zeek/Sigma Style)
-        rulesList.add(new DetectionRule("Detect Mimikatz", "Description", "Contains", "mimikatz", "High"));
-        rulesList.add(new DetectionRule("Recon: Whoami", "Description", "Contains", "whoami", "Low"));
-        rulesList.add(new DetectionRule("Defense Evasion", "Description", "Contains", "-EncodedCommand", "High"));
-        rulesList.add(new DetectionRule("Clear Logs", "EventID", "Equals", "1102", "Medium"));
-        // New Advanced Rules
-        rulesList.add(new DetectionRule("Brute Force: Failed Logon", "EventID", "Equals", "4625", "Medium"));
-        rulesList.add(new DetectionRule("Suspicious: PowerShell Encoded", "Description", "Contains", " -enc ", "High"));
-        rulesList.add(new DetectionRule("Persistence: Registry Run Key", "Description", "Contains",
-                "CurrentVersion\\Run", "High"));
+        String ruleId = selected.getId();
+        if (ruleId != null && ruleId.startsWith("sys-")) {
+            showAlert("Action Denied", "System Rules cannot be deleted.");
+            return;
+        }
+
+        boolean removed = AdvancedRulesEngine.removeSigmaRule(ruleId);
+        if (removed) {
+            showAlert("Success", "Rule deleted: " + selected.getName());
+            setupRulesEngine(); // Refresh
+        } else {
+            showAlert("Error", "Could not delete rule.");
+        }
     }
 
     @FXML
     private void handleAddRule() {
-        if (ruleNameField.getText().isEmpty() || ruleValueField.getText().isEmpty())
-            return;
-
-        rulesList.add(new DetectionRule(
-                ruleNameField.getText(),
-                ruleFieldCombo.getValue() != null ? ruleFieldCombo.getValue() : "Description",
-                ruleConditionCombo.getValue() != null ? ruleConditionCombo.getValue() : "Contains",
-                ruleValueField.getText(),
-                ruleSeverityCombo.getValue() != null ? ruleSeverityCombo.getValue() : "Medium"));
-        ruleNameField.clear();
-        ruleValueField.clear();
+        // Legacy method - functionality removed in favor of AdvancedRulesEngine
     }
 
     private void applyRules(LogEvent event) {
-        for (DetectionRule rule : rulesList) {
-            String checkVal = "";
-            switch (rule.getField()) {
-                case "Description":
-                    checkVal = event.getDescription() + " " + event.getFullDetails();
-                    break;
-                case "EventID":
-                    checkVal = event.getEventId();
-                    break;
-                case "User":
-                    checkVal = event.getUser();
-                    break;
-                case "Host":
-                    checkVal = event.getHost();
-                    break;
-            }
+        // Apply Advanced MITRE/Sigma Rules ONLY
+        AdvancedRulesEngine.applyRules(event);
+    }
 
-            if (checkVal == null)
-                continue;
-            checkVal = checkVal.toLowerCase();
-            String ruleVal = rule.getValue().toLowerCase();
+    @FXML
+    private TextArea sigmaRuleEditor;
 
-            boolean match = false;
-            switch (rule.getCondition()) {
-                case "Contains":
-                    match = checkVal.contains(ruleVal);
-                    break;
-                case "Equals":
-                    match = checkVal.equals(ruleVal);
-                    break;
-                case "Starts With":
-                    match = checkVal.startsWith(ruleVal);
-                    break;
-            }
+    @FXML
+    private void handleImportRule() {
+        String yamlContent = sigmaRuleEditor.getText();
+        if (yamlContent == null || yamlContent.trim().isEmpty()) {
+            showAlert("Error", "Please paste a YAML rule first.");
+            return;
+        }
+        doImportRule(yamlContent);
+    }
 
-            if (match) {
-                event.setAlert(true);
-                event.setAlertSeverity(rule.getSeverity());
-                event.setDetectionName(rule.getName()); // Set Detection Name
-                totalAlertCount++;
-                Platform.runLater(() -> lblTotalAlerts.setText(String.valueOf(totalAlertCount)));
-                break;
+    @FXML
+    private void handleLoadRuleFile() {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Open Sigma Rule File");
+        fileChooser.getExtensionFilters().addAll(
+                new FileChooser.ExtensionFilter("Sigma YAML", "*.yaml", "*.yml"));
+        File selectedFile = fileChooser.showOpenDialog(sigmaRuleEditor.getScene().getWindow());
+        if (selectedFile != null) {
+            try {
+                String content = java.nio.file.Files.readString(selectedFile.toPath());
+                doImportRule(content);
+            } catch (Exception e) {
+                showAlert("File Error", "Could not read file: " + e.getMessage());
             }
         }
+    }
+
+    private void doImportRule(String yamlContent) {
+        try {
+            com.myapp.loco.sigma.SigmaRule rule = com.myapp.loco.sigma.SigmaParser.parse(yamlContent);
+            AdvancedRulesEngine.addSigmaRule(rule);
+
+            // Refresh Table
+            setupRulesEngine(); // Re-populate
+
+            sigmaRuleEditor.clear();
+            sigmaRuleEditor.setText(yamlContent); // Keep content visible or clear it? Cleared in previous code, stick
+                                                  // to clear or maybe show loaded? Clearing editor for now logic.
+            sigmaRuleEditor.clear();
+            showAlert("Success", "Rule imported: " + rule.getTitle());
+        } catch (Exception e) {
+            showAlert("Import Failed", "Invalid Sigma YAML: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    private void showAlert(String title, String content) {
+        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(content);
+        alert.showAndWait();
     }
 
     // --- NAVIGATION UPDATE ---
@@ -949,6 +956,8 @@ public class MainController {
             Element eventDataElement = (Element) eventElement.getElementsByTagName("EventData").item(0);
             String user = "N/A";
             String fullDetails = "";
+            java.util.Map<String, String> dataMap = new java.util.HashMap<>();
+
             if (eventDataElement != null) {
                 NodeList dataNodes = eventDataElement.getElementsByTagName("Data");
                 StringBuilder sb = new StringBuilder();
@@ -959,6 +968,8 @@ public class MainController {
                     if (nameAttr != null) {
                         String name = nameAttr.getNodeValue();
                         sb.append(name).append(": ").append(val).append("\n");
+                        dataMap.put(name, val); // Store for Rules Engine
+
                         if (("User".equals(name) || "TargetUserName".equals(name) || "SubjectUserName".equals(name))
                                 && !val.equals("-")) {
                             if (val.contains("\\"))
@@ -966,14 +977,17 @@ public class MainController {
                             else
                                 user = val;
                         }
-                    } else
+                    } else {
                         sb.append(val).append("\n");
+                        // For data without Name attribute (rare in structured logs but possible)
+                        dataMap.put("UnknownData" + j, val);
+                    }
                 }
                 fullDetails = sb.toString().trim();
             }
             String description = fullDetails.split("\n")[0] + " [...]";
             LogEvent log = new LogEvent(eventId, timeCreated, providerName, level, description, user, computer,
-                    fullDetails);
+                    fullDetails, dataMap);
             applyRules(log);
             events.add(log);
         }
@@ -983,7 +997,8 @@ public class MainController {
     private void showLogDetails(LogEvent logEvent) {
         Alert alert = new Alert(Alert.AlertType.INFORMATION);
         alert.setTitle("Details");
-        alert.setHeaderText(logEvent.getEventId());
+        alert.setHeaderText("Event " + logEvent.getEventId() + " - " + logEvent.getDetectionName()); // Show Detection
+                                                                                                     // Name
         TextArea area = new TextArea(logEvent.getFullDetails());
         area.setEditable(false);
         area.setWrapText(true);
