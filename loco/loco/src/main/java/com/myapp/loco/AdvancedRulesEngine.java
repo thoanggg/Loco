@@ -46,27 +46,40 @@ public class AdvancedRulesEngine {
     // --- DYNAMIC SIGMA RULE SUPPORT ---
     private static final java.util.List<com.myapp.loco.sigma.SigmaRule> dynamicRules = new java.util.ArrayList<>();
 
-    public static void addSigmaRule(com.myapp.loco.sigma.SigmaRule rule) {
-        dynamicRules.add(rule);
+    // Load persisted rules
+    static {
+        try {
+            java.util.List<java.util.Map<String, String>> savedRules = DatabaseManager.getInstance().getAllRules();
+            for (java.util.Map<String, String> ruleData : savedRules) {
+                String yaml = ruleData.get("yaml");
+                if (yaml != null && !yaml.isEmpty()) {
+                    try {
+                        com.myapp.loco.sigma.SigmaRule rule = com.myapp.loco.sigma.SigmaParser.parse(yaml);
+                        if (rule != null) {
+                            dynamicRules.add(rule);
+                        }
+                    } catch (Exception e) {
+                        System.err.println("Failed to load rule: " + e.getMessage());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to init rules from DB: " + e.getMessage());
+        }
     }
 
-    public static boolean removeSigmaRule(String id) {
-        return dynamicRules.removeIf(r -> r.getId().equals(id));
-    }
-
-    public static java.util.List<com.myapp.loco.sigma.SigmaRule> getDynamicRules() {
-        return dynamicRules;
-    }
+    // Old methods removed, see below for new impl with DB
 
     public static List<RuleMetadata> getRules() {
         List<RuleMetadata> rules = new ArrayList<>();
-        // 1. Hardcoded Rules (IDs prefixed with 'sys-')
+
+        // 1. Add Hardcoded Java Rules
         rules.add(new RuleMetadata("sys-1", "Suspicious Office Child Process", "High", "T1204",
                 "Office app spawning CMD/PowerShell"));
-        rules.add(new RuleMetadata("sys-2", "Unsigned Executable in Temp", "Medium", "T1204",
+        rules.add(new RuleMetadata("sys-2", "Unsigned Executable in Suspect Folder", "Medium", "T1204",
                 "Unsigned binary running from %TEMP%"));
         rules.add(new RuleMetadata("sys-3", "LSASS Memory Access Detected", "Critical", "T1003",
-                "Process accessing LSASS memory (0x1F3FFF)"));
+                "Process accessing LSASS memory"));
         rules.add(new RuleMetadata("sys-4", "Mimikatz Activity Detected", "Critical", "T1003",
                 "CommandLine contains sekurlsa/logonpasswords"));
         rules.add(new RuleMetadata("sys-5", "Sticky Keys Backdoor Attempt", "High", "T1546.008",
@@ -81,7 +94,7 @@ public class AdvancedRulesEngine {
         rules.add(new RuleMetadata("sys-10", "Suspicious Process Network Connection", "High", "T1071",
                 "Notepad/Calc connecting to Internet"));
 
-        // 2. Dynamic Rules
+        // 2. Add Dynamic Sigma Rules
         for (com.myapp.loco.sigma.SigmaRule s : dynamicRules) {
             rules.add(new RuleMetadata(
                     s.getId(),
@@ -204,8 +217,31 @@ public class AdvancedRulesEngine {
             }
         }
 
+        // --- DYNAMIC RULES MANAGEMENT ---
+
         // --- DYNAMIC RULES EVALUATION ---
         evaluateSigmaRules(log);
+    } // End of applyRules
+
+    // --- DYNAMIC RULES MANAGEMENT ---
+
+    public static void addSigmaRule(com.myapp.loco.sigma.SigmaRule rule) {
+        addSigmaRule(rule, null); // Delegate
+    }
+
+    public static void addSigmaRule(com.myapp.loco.sigma.SigmaRule rule, String originalYaml) {
+        dynamicRules.add(rule);
+        if (originalYaml != null) {
+            DatabaseManager.getInstance().insertRule(rule, originalYaml);
+        }
+    }
+
+    public static boolean removeSigmaRule(String id) {
+        boolean removed = dynamicRules.removeIf(r -> r.getId().equals(id));
+        if (removed) {
+            DatabaseManager.getInstance().deleteRule(id);
+        }
+        return removed;
     }
 
     private static void evaluateSigmaRules(LogEvent event) {
