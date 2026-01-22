@@ -82,7 +82,7 @@ public class NetworkScanner {
         // Fallback: Nếu không tìm thấy gì, thử thêm dải phổ biến
         if (subnets.isEmpty()) {
             subnets.add("192.168.1");
-            subnets.add("192.168.0");
+            subnets.add("192.168.30");
             subnets.add("10.0.0"); // Common in enterprise/cloud
         }
         return subnets;
