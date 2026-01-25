@@ -20,16 +20,12 @@ pipeline {
         stage('Code Quality (SonarQube)') {
             steps {
                 dir('loco/loco') {
-                    // Requires 'SonarQube' server configured in Jenkins
-                    script {
-                        try {
-                            withSonarQubeEnv('SonarQube') {
-                                // Updated based on SonarQube UI recommendation
-                                sh './mvnw clean verify sonar:sonar -Dsonar.projectKey=Loco -Dsonar.projectName="Loco"'
-                            }
-                        } catch (Exception e) {
-                            echo 'SonarQube not configured or failed, skipping...'
-                        }
+                    withSonarQubeEnv('SonarQube') {
+                        sh '''
+                        ./mvnw clean verify sonar:sonar \
+                          -Dsonar.projectKey=loco-analyzer \
+                          -Dsonar.projectName="LoCo Analyzer"
+                        '''
                     }
                 }
             }
