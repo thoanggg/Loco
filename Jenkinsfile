@@ -2,8 +2,6 @@ pipeline {
     agent any
 
     tools {
-        // Ensure "Maven 3" is configured in Global Tool Configuration
-        // Removed jdk requirement to use agent's default java
         maven 'Maven 3'
     }
 
@@ -27,8 +25,8 @@ pipeline {
             steps {
                 dir('loco/loco') {
                     withSonarQubeEnv('SonarQube') {
-                        // Scan with new projectKey
-                        sh 'mvn sonar:sonar -Dsonar.projectKey=thoanggg_LoCo-Analyzer'
+                        // Scan with new projectKey using fully qualified plugin name
+                        sh 'mvn org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=thoanggg_LoCo-Analyzer'
                     }
                 }
             }
