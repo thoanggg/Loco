@@ -25,8 +25,7 @@ pipeline {
             steps {
                 dir('loco/loco') {
                     withSonarQubeEnv('SonarQube') {
-                        // Scan with new projectKey using fully qualified plugin name
-                        sh 'mvn org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=thoanggg_LoCo-Analyzer'
+                        sh 'mvn org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=loco-analyzer'
                     }
                 }
             }
