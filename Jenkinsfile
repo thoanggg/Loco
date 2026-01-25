@@ -2,9 +2,9 @@ pipeline {
     agent any
 
     tools {
-        // Ensure "Maven 3" and "jdk17" are configured in Global Tool Configuration
+        // Ensure "Maven 3" is configured in Global Tool Configuration
+        // Removed jdk requirement to use agent's default java
         maven 'Maven 3'
-        jdk 'jdk17'
     }
 
     stages {
