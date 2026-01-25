@@ -1021,42 +1021,23 @@ public class MainController {
         });
     }
 
-    static {
-        System.setProperty("jdk.internal.httpclient.disableHostnameVerification", "true");
-        System.setProperty("jsse.enableSNIExtension", "false");
-    }
-
     private static HttpClient createInsecureHttpClient() {
         try {
-            TrustManager[] trustAllCerts = new TrustManager[] {
-                    new X509TrustManager() {
-                        public X509Certificate[] getAcceptedIssuers() {
-                            return null;
-                        }
+            // Use stronger protocol: TLSv1.3
+            SSLContext sc = SSLContext.getInstance("TLSv1.3");
 
-                        public void checkClientTrusted(X509Certificate[] certs, String authType) {
-                        }
-
-                        public void checkServerTrusted(X509Certificate[] certs, String authType) {
-                        }
-                    }
-            };
-            SSLContext sc = SSLContext.getInstance("SSL");
-            sc.init(null, trustAllCerts, new SecureRandom());
-
-            // Disable hostname verification by not setting identification algorithm
-            javax.net.ssl.SSLParameters sslParams = new javax.net.ssl.SSLParameters();
-            sslParams.setEndpointIdentificationAlgorithm(null);
+            // Validate certificates (default TrustManager)
+            sc.init(null, null, new SecureRandom());
 
             return HttpClient.newBuilder()
                     .version(HttpClient.Version.HTTP_1_1)
-                    // Increased timeout to 10s to handle slow SSL handshakes on local network
                     .connectTimeout(java.time.Duration.ofSeconds(10))
                     .sslContext(sc)
-                    .sslParameters(sslParams)
                     .build();
         } catch (Exception e) {
-            e.printStackTrace();
+            // Log error instead of printStackTrace
+            java.util.logging.Logger.getLogger(MainController.class.getName())
+                    .log(java.util.logging.Level.SEVERE, "Failed to initialize secure HttpClient", e);
             return HttpClient.newHttpClient();
         }
     }
