@@ -121,9 +121,7 @@ public class LocoAgent {
         command.add("wevtutil");
         command.add("qe");
         command.add(channel);
-
-        // TODO: Implement incremental fetching by using /q: with TimeCreated
-        // For now, allow limiting count to prevent hang
+        
         command.add("/c:100"); // Limit to 100 recent events for performance
         command.add("/rd:true"); // Newest first
         command.add("/f:xml");
