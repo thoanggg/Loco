@@ -1,82 +1,109 @@
 # 🛡️ LOCO - Secured Log Collector
 
-Loco is a cross-platform security log collection and analysis system designed for threat hunting and incident response. It consists of a headless **Admin Dashboard** (running on Linux/Ubuntu) and lightweight **Agents** (running on Windows).
+![License](https://img.shields.io/badge/License-MIT-blue.svg)
+![Java](https://img.shields.io/badge/Java-17-orange.svg)
+![Admin](https://img.shields.io/badge/Admin-JavaFX-green.svg)
+![Agent](https://img.shields.io/badge/Agent-Javalin-purple.svg)
+![Security](https://img.shields.io/badge/Security-TLS%20RSA%203072-red.svg)
+
+**Loco** is a specialized cross-platform security monitoring system designed for threat hunting and incident response in hybrid environments. It combines a lightweight, embeddable Windows Agent with a powerful Linux-based Admin Dashboard to provide real-time visibility into security events.
+
+---
 
 ## 🚀 Key Features
-*   **Cross-Platform Architecture**: Admin runs on Linux, Agents run on Windows.
-*   **Real-time Analysis**: Dashboard with charts for Alert Severity Distribution and Event Volume.
-*   **Advanced Detection Rules**:
-    *   Built-in Rule Engine supporting "Contains", "Equals", "Starts With".
-    *   Detects Brute Force, Mimikatz, PowerShell Persistence, and more.
-*   **Secure Communication (HTTPS)**: All traffic between Admin and Agents is encrypted.
-*   **Wazuh-Inspired UI**: Dark mode, cybersecurity-themed interface for optimal SOC visibility.
 
-## 🔒 Security Architecture (HTTPS Implementation)
-Loco uses a robust **Self-Signed Certificate** model to ensure encrypted communication without the complexity of a public PKI infrastructure.
+### 🔍 Advanced Threat Detection
+Detects modern attack techniques mapped to **MITRE ATT&CK**:
+*   **Behavioral Analysis**: Identifies suspicious parent-child process relationships (e.g., Office spawning PowerShell).
+*   **Credential Dumping**: Monitors LSASS memory access and specific Mimikatz command lines.
+*   **Persistence**: Detects new service installations, scheduled tasks, and registry backdoors (Sticky Keys).
+*   **Sigma Rules Engine**: Built-in interpreter for parsing and executing industry-standard **Sigma** detection rules (YAML).
 
-### 1. Agent-Side Encryption
-The Windows Agent (`loco-agent`) runs a **Javalin** web server powered by **Jetty**.
-*   **Keystore**: A self-signed RSA-3072 certificate is generated and stored in a JKS keystore (`keystore.jks`). This keystore is embedded directly inside the Agent's shaded JAR file.
-*   **Configuration**: When the Agent starts, it extracts or reads the keystore from the classpath and configures the Jetty SSL Context to serve traffic on port `9876` using TLS.
+### 🔒 Security-First Architecture (DevSecOps)
+Built with "Secure by Design" principles to protect sensitive log data:
+*   **Encrypted Transport**: All communication between Agents and Admin is secured via **TLS/HTTPS**.
+*   **Private PKI**: Agents deploy with embedded self-signed RSA-3072 certificates (`keystore.jks`), eliminating external PKI dependencies.
+*   **Input Validation**: Strict whitelisting prevents Command Injection on the Agent side.
 
-```java
-// Snippet: Agent SSL Config
-sslContextFactory.setKeyStorePath(LocoAgent.class.getResource("/keystore.jks").toExternalForm());
-sslContextFactory.setKeyStorePassword("password123");
+### ⚡ Smart Network Discovery
+*   **Automated Scanning**: Multi-threaded scanner (100 parallel threads) automatically discovers active agents across local subnets.
+*   **Zero-Config**: Agents are identified and onboarded without manual IP entry.
+
+---
+
+## 🛠️ Architecture
+
+The system follows a distributed Client-Server model:
+
+```mermaid
+graph LR
+    A[Loco Agent 1 (Windows)] -- HTTPS/TLS --> S[Loco Admin (Linux)]
+    B[Loco Agent 2 (Windows)] -- HTTPS/TLS --> S
+    C[Loco Agent 3 (Windows)] -- HTTPS/TLS --> S
+    S -- Rules & Config --> D[(SQLite DB)]
 ```
 
-### 2. Admin-Side Trust
-The Admin UI (`loco`) acts as the HTTPS Client.
-*   **Custom Trust Manager**: Since the Agent uses a self-signed certificate, the Admin's `HttpClient` is configured with a custom `TrustManager` that explicitly trusts the internal certificate (or trusts all certs in this private environment).
-*   **Hostname Verification**: Hostname verification is disabled to allow the Admin to connect to Agents by IP address or varying hostnames without certificate errors.
+*   **Loco Admin**: JavaFX application running on Linux. Handles visualization, rule management, and network scanning.
+*   **Loco Agent**: Lightweight Javalin server running on Windows. Exposes `wevtutil` queries via a secure REST API.
 
-```java
-// Snippet: Admin Secure Client
-SSLContext sc = SSLContext.getInstance("SSL");
-sc.init(null, trustAllCerts, new SecureRandom());
-// Connects via https://<AGENT_IP>:9876/
-```
+---
 
-This ensures that network capturing tools (like Wireshark) cannot inspect the log data or commands in transit.
+## 💻 Tech Stack
 
-## 🛠️ Build & Run
+| Component | Technology | Description |
+| :--- | :--- | :--- |
+| **Core** | Java 17 LTS | Primary language for performance and type safety. |
+| **Admin UI** | JavaFX 17 | Modern, hardware-accelerated GUI toolkit. |
+| **Agent Server** | Javalin / Jetty | Lightweight web framework for the Agent REST API. |
+| **Database** | SQLite | Serverless, zero-configuration local storage. |
+| **Parsing** | Jackson / SnakeYAML | JSON processing and Sigma Rule (YAML) interpretation. |
+| **Security** | JSSE (SSLContext) | Custom Trust Managers for self-signed certificate handling. |
+
+---
+
+## � Installation
 
 ### Prerequisites
-*   Java JDK 17+
-*   Maven
+*   **Java JDK 17+**
+*   **Maven** 3.8+
 
-### 1. Build Both Modules
+### 1. Build the Project
+Clone the repository and build both modules:
 ```bash
 mvn clean package -DskipTests
 ```
 
-### 2. Run Admin (Linux)
+### 2. Run the Admin Dashboard (Linux)
 ```bash
 cd loco
 ./mvnw javafx:run
 ```
 
-### 3. Run Agent (Windows)
-Copy the shaded JAR to the target Windows machine:
+### 3. Deploy the Agent (Windows)
+Copy the shaded JAR from `loco-agent/target/loco-agent-1.0-SNAPSHOT.jar` to your Windows machine.
+
+**Manual Run:**
 ```cmd
-copy loco-agent/target/loco-agent-1.0-SNAPSHOT.jar C:\Tools\
-java -jar C:\Tools\loco-agent-1.0-SNAPSHOT.jar
+java -jar loco-agent-1.0-SNAPSHOT.jar
 ```
+*(The agent will start on port 9876 using the embedded keystore)*
 
-### 4. Run as Windows Service (Optional but Recommended)
-To run the agent in the background and auto-start with Windows:
-1.  Download **WinSW (Windows Service Wrapper)** from [WinSW Releases](https://github.com/winsw/winsw/releases) (e.g., `WinSW-x64.exe`).
-2.  Rename the downloaded file to **`loco-agent.exe`**.
-3.  Place `loco-agent.exe`, `loco-agent.xml`, and `install_service.bat` in the same folder as your JAR (`C:\Tools\`).
-4.  Right-click `install_service.bat` and **Run as Administrator**.
-    *   *To uninstall: Run `uninstall_service.bat` as Administrator.*
+**Run as Service:**
+Use [WinSW](https://github.com/winsw/winsw) to wrap the JAR as a Windows Service for production deployments.
 
-### 5. Manual Service Installation (Command Line)
-If you prefer not to use the `.bat` files:
-1.  Open **Command Prompt (Admin)**.
-2.  Navigate to the folder: `cd C:\Tools\`
-3.  Run: `loco-agent.exe install`
-4.  Run: `loco-agent.exe start`
-5.  To stop and remove:
-    *   `loco-agent.exe stop`
-    *   `loco-agent.exe uninstall`
+---
+
+## 📊 Usage Guide
+
+1.  **Start the Admin Dashboard**: Launch the application on your Linux workstation.
+2.  **Discover Agents**: The system automatically scans local subnets on startup. Detected agents connect automatically.
+3.  **Monitor Events**: Navigate to the **Analyzye** tab to see real-time alerts.
+4.  **Manage Rules**: Use the **Rules Engine** to view active detection logic or import new Sigma rules.
+
+---
+
+## 🤝 Contributing
+Contributions are welcome! Please submit a Pull Request or open an issue for bug reports.
+
+## 📄 License
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

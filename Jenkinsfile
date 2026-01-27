@@ -55,10 +55,9 @@ pipeline {
                     jpackage --name Loco \
                              --input target/libs \
                              --main-jar loco-1.0-SNAPSHOT.jar \
-                             --main-class com.myapp.loco.MainApp \
+                             --main-class com.myapp.loco.Launcher \
                              --type app-image \
-                             --dest output \
-                             --java-options "--module-path \\$APPDIR/lib/app --add-modules javafx.controls,javafx.fxml"
+                             --dest output
 
                     # Fix duplicate JavaFX jars for Linux runtime
                     cp target/libs/javafx-*-linux.jar output/Loco/lib/app/

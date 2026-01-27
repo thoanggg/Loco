@@ -25,7 +25,8 @@ public class SigmaParser {
     private static SigmaRule mapToRule(Map<String, Object> data) {
         SigmaRule rule = new SigmaRule();
         rule.setTitle((String) data.getOrDefault("title", "Unknown Rule"));
-        rule.setId((String) data.get("id"));
+        Object idObj = data.get("id");
+        rule.setId(idObj != null ? String.valueOf(idObj) : null);
         rule.setStatus((String) data.get("status"));
         rule.setDescription((String) data.get("description"));
         rule.setAuthor((String) data.get("author"));

@@ -710,6 +710,7 @@ public class MainController {
         filterEndDate.setValue(null);
     }
 
+    @FXML
     private void handleClearTarget() {
         targetAgentCombo.setValue(allAgents);
     }
