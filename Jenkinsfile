@@ -57,6 +57,7 @@ pipeline {
                     fi
 
                     # Create custom runtime manually to avoid objcopy dependency (jpackage might try to strip by default)
+                    rm -rf runtime
                     ./jdk-21/bin/jlink \
                         --module-path jdk-21/jmods \
                         --add-modules java.base,java.sql,java.rmi,java.management,java.logging,java.xml,java.naming,java.net.http,java.desktop,jdk.unsupported,jdk.crypto.ec,jdk.management.jfr \
