@@ -49,6 +49,25 @@
 
         <!-- Lưu ý: java.net.http (HttpClient) đã có sẵn trong JDK 17 -->
 
+        <!-- JUnit 5 & Mockito (Test) -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+            <version>5.9.2</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-engine</artifactId>
+            <version>5.9.2</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>5.3.1</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -63,12 +82,17 @@
                 </configuration>
             </plugin>
             <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.2</version>
+            </plugin>
+            <plugin>
                 <groupId>org.openjfx</groupId>
                 <artifactId>javafx-maven-plugin</artifactId>
                 <version>0.0.8</version>
                 <configuration>
                     <!-- Cập nhật mainClass để khớp với cấu trúc thư mục của bạn -->
-                    <mainClass>com.myapp.loco.MainApp</mainClass>
+                    <mainClass>com.myapp.loco.Launcher</mainClass>
                 </configuration>
             </plugin>
             <plugin>
@@ -86,6 +110,32 @@
                             <outputDirectory>${project.build.directory}/libs</outputDirectory>
                             <includeScope>runtime</includeScope>
                         </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.10</version>
+                <configuration>
+                    <excludes>
+                        <exclude>com/myapp/loco/MainApp.class</exclude>
+                        <exclude>com/myapp/loco/Launcher.class</exclude>
+                        <exclude>com/myapp/loco/MainController*.class</exclude>
+                    </excludes>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
                     </execution>
                 </executions>
             </plugin>

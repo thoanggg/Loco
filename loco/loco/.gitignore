@@ -43,3 +43,7 @@ build/
 *.json
 *.log
 !src/main/resources/**/*.json
+
+### Build Artifacts ###
+output/
+*.tar.gz

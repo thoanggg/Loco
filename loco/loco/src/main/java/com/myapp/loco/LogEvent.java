@@ -1,6 +1,8 @@
 package com.myapp.loco;
 
 import javafx.beans.property.SimpleStringProperty;
+import java.util.Map;
+import java.util.HashMap;
 
 public class LogEvent {
     private final SimpleStringProperty eventId;
@@ -11,26 +13,101 @@ public class LogEvent {
     private final SimpleStringProperty user;
     private final SimpleStringProperty host;
     private final String fullDetails;
-    private final java.util.Map<String, String> eventData; // Structured data for Rules Engine
+    private final Map<String, String> eventData; // Structured data for Rules Engine
 
-    // --- THÊM MỚI: Cờ đánh dấu Alert ---
+    // --- Alert Flags ---
     private boolean isAlert = false;
     private String alertSeverity = "";
     private String detectionName = "";
     private String mitreId = ""; // Txxxx
     private final SimpleStringProperty status = new SimpleStringProperty("Not Acknowledged");
 
+    private LogEvent(Builder builder) {
+        this.eventId = new SimpleStringProperty(builder.eventId);
+        this.timeCreated = new SimpleStringProperty(builder.timeCreated);
+        this.providerName = new SimpleStringProperty(builder.providerName);
+        this.level = new SimpleStringProperty(builder.level);
+        this.description = new SimpleStringProperty(builder.description);
+        this.user = new SimpleStringProperty(builder.user);
+        this.host = new SimpleStringProperty(builder.host);
+        this.fullDetails = builder.fullDetails;
+        this.eventData = builder.eventData != null ? builder.eventData : new HashMap<>();
+    }
+
+    // Legacy Constructor for backward compatibility (delegates to Builder)
     public LogEvent(String eventId, String timeCreated, String providerName, String level, String description,
-            String user, String host, String fullDetails, java.util.Map<String, String> eventData) {
-        this.eventId = new SimpleStringProperty(eventId);
-        this.timeCreated = new SimpleStringProperty(timeCreated);
-        this.providerName = new SimpleStringProperty(providerName);
-        this.level = new SimpleStringProperty(level);
-        this.description = new SimpleStringProperty(description);
-        this.user = new SimpleStringProperty(user);
-        this.host = new SimpleStringProperty(host);
-        this.fullDetails = fullDetails;
-        this.eventData = eventData != null ? eventData : new java.util.HashMap<>();
+            String user, String host, String fullDetails, Map<String, String> eventData) {
+        this(new Builder()
+                .eventId(eventId)
+                .timeCreated(timeCreated)
+                .providerName(providerName)
+                .level(level)
+                .description(description)
+                .user(user)
+                .host(host)
+                .fullDetails(fullDetails)
+                .eventData(eventData));
+    }
+
+    public static class Builder {
+        private String eventId;
+        private String timeCreated;
+        private String providerName;
+        private String level;
+        private String description;
+        private String user;
+        private String host;
+        private String fullDetails;
+        private Map<String, String> eventData;
+
+        public Builder eventId(String val) {
+            eventId = val;
+            return this;
+        }
+
+        public Builder timeCreated(String val) {
+            timeCreated = val;
+            return this;
+        }
+
+        public Builder providerName(String val) {
+            providerName = val;
+            return this;
+        }
+
+        public Builder level(String val) {
+            level = val;
+            return this;
+        }
+
+        public Builder description(String val) {
+            description = val;
+            return this;
+        }
+
+        public Builder user(String val) {
+            user = val;
+            return this;
+        }
+
+        public Builder host(String val) {
+            host = val;
+            return this;
+        }
+
+        public Builder fullDetails(String val) {
+            fullDetails = val;
+            return this;
+        }
+
+        public Builder eventData(Map<String, String> val) {
+            eventData = val;
+            return this;
+        }
+
+        public LogEvent build() {
+            return new LogEvent(this);
+        }
     }
 
     public String getEventId() {

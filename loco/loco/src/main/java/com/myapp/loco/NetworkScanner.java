@@ -8,6 +8,8 @@ import java.util.*;
 import java.util.concurrent.*;
 
 public class NetworkScanner {
+    private static final java.util.logging.Logger LOGGER = java.util.logging.Logger
+            .getLogger(NetworkScanner.class.getName());
 
     /**
      * Quét TẤT CẢ các dải mạng nội bộ tìm thấy trên máy tính.
@@ -20,31 +22,33 @@ public class NetworkScanner {
 
         // Tăng số luồng lên 100 để quét nhanh hơn (vì quét nhiều subnet)
         ExecutorService executor = Executors.newFixedThreadPool(100);
-        List<Future<?>> futures = new ArrayList<>();
 
-        System.out.println("Starting scan on subnets: " + subnets);
+        LOGGER.info("Starting scan on subnets: " + subnets);
 
-        for (String subnet : subnets) {
-            // Quét từ .1 đến .254 cho mỗi subnet
-            for (int i = 1; i < 255; i++) {
-                String ip = subnet + "." + i;
-                futures.add(executor.submit(() -> {
-                    if (checkPort(ip, 9876)) {
-                        activeIps.add(ip);
-                    }
-                }));
-            }
-        }
-
-        // Chờ tất cả hoàn thành
-        executor.shutdown();
         try {
-            // Đợi tối đa 5 giây cho toàn bộ quá trình
-            if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
-                executor.shutdownNow();
+            for (String subnet : subnets) {
+                // Quét từ .1 đến .254 cho mỗi subnet
+                for (int i = 1; i < 255; i++) {
+                    String ip = subnet + "." + i;
+                    executor.submit(() -> {
+                        if (checkPort(ip, 9876)) {
+                            activeIps.add(ip);
+                        }
+                    });
+                }
             }
-        } catch (InterruptedException e) {
-            executor.shutdownNow();
+        } finally {
+            // Chờ tất cả hoàn thành
+            executor.shutdown();
+            try {
+                // Đợi tối đa 5 giây cho toàn bộ quá trình
+                if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+                    executor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                executor.shutdownNow();
+                Thread.currentThread().interrupt(); // Restore interrupt status
+            }
         }
 
         return activeIps;

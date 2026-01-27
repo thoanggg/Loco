@@ -1,13 +1,14 @@
 package com.myapp.loco.sigma;
 
 import org.yaml.snakeyaml.Yaml;
-import org.yaml.snakeyaml.constructor.Constructor;
 
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.util.Map;
 
 public class SigmaParser {
+
+    private SigmaParser() {
+        throw new IllegalStateException("Utility class");
+    }
 
     public static SigmaRule parse(String yamlContent) {
         Yaml yaml = new Yaml();
@@ -16,7 +17,7 @@ public class SigmaParser {
             Map<String, Object> data = yaml.load(yamlContent);
             return mapToRule(data);
         } catch (Exception e) {
-            throw new RuntimeException("Failed to parse Sigma YAML: " + e.getMessage(), e);
+            throw new IllegalArgumentException("Failed to parse Sigma YAML: " + e.getMessage(), e);
         }
     }
 
@@ -24,7 +25,8 @@ public class SigmaParser {
     private static SigmaRule mapToRule(Map<String, Object> data) {
         SigmaRule rule = new SigmaRule();
         rule.setTitle((String) data.getOrDefault("title", "Unknown Rule"));
-        rule.setId((String) data.get("id"));
+        Object idObj = data.get("id");
+        rule.setId(idObj != null ? String.valueOf(idObj) : null);
         rule.setStatus((String) data.get("status"));
         rule.setDescription((String) data.get("description"));
         rule.setAuthor((String) data.get("author"));

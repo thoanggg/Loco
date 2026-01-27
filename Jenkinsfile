@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    tools {
+        maven 'Maven 3'
+    }
+
     stages {
         stage('Checkout') {
             steps {
@@ -8,25 +12,29 @@ pipeline {
             }
         }
 
-        stage('Build') {
+        stage('Build & Test') {
             steps {
                 dir('loco/loco') {
-                    sh 'chmod +x mvnw'
-                    sh './mvnw clean package -DskipTests'
+                    // Build and run tests
+                    sh 'mvn clean package -DskipTests=false'
                 }
             }
         }
 
-        stage('Code Quality (SonarQube)') {
+        stage('SonarQube Analysis') {
             steps {
                 dir('loco/loco') {
                     withSonarQubeEnv('SonarQube') {
-                        sh '''
-                        ./mvnw clean verify sonar:sonar \
-                          -Dsonar.projectKey=loco-analyzer \
-                          -Dsonar.projectName="LoCo Analyzer"
-                        '''
+                        sh 'mvn org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=loco-analyzer'
                     }
+                }
+            }
+        }
+
+        stage("Quality Gate") {
+            steps {
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
                 }
             }
         }
@@ -37,24 +45,44 @@ pipeline {
                     sh '''
                     # Clean previous output
                     rm -rf output
+                    mkdir -p target/libs
+                    cp target/loco-1.0-SNAPSHOT.jar target/libs/
 
-                    # Run JPackage
-                    jpackage --name Loco \
+                    # Download standalone JDK 21 (with jmods) since system JDK is missing them
+                    if [ ! -d "jdk-21" ]; then
+                         curl -L "https://api.adoptium.net/v3/binary/latest/21/ga/linux/x64/jdk/hotspot/normal/eclipse?project=jdk" -o jdk.tar.gz
+                         tar -xzf jdk.tar.gz
+                         mv jdk-21* jdk-21
+                         rm jdk.tar.gz
+                    fi
+
+                    # Create custom runtime manually to avoid objcopy dependency (jpackage might try to strip by default)
+                    rm -rf runtime
+                    ./jdk-21/bin/jlink \
+                        --module-path jdk-21/jmods \
+                        --add-modules java.base,java.sql,java.rmi,java.management,java.logging,java.xml,java.naming,java.net.http,java.desktop,jdk.unsupported,jdk.crypto.ec,jdk.management.jfr \
+                        --output runtime \
+                        --no-header-files \
+                        --no-man-pages \
+                        --compress=2
+
+                    # Run JPackage for Linux using the pre-built runtime
+                    ./jdk-21/bin/jpackage --name Loco \
                              --input target/libs \
                              --main-jar loco-1.0-SNAPSHOT.jar \
-                             --main-class com.myapp.loco.MainApp \
+                             --main-class com.myapp.loco.Launcher \
                              --type app-image \
-                             --dest output \
-                             --java-options "--module-path \\$APPDIR/lib/app --add-modules javafx.controls,javafx.fxml"
+                             --runtime-image runtime \
+                             --dest output
 
                     # Fix duplicate JavaFX jars for Linux runtime
                     cp target/libs/javafx-*-linux.jar output/Loco/lib/app/
-                    rm -f output/Loco/lib/app/javafx-base-17.0.2.jar
-                    rm -f output/Loco/lib/app/javafx-controls-17.0.2.jar
-                    rm -f output/Loco/lib/app/javafx-fxml-17.0.2.jar
-                    rm -f output/Loco/lib/app/javafx-graphics-17.0.2.jar
+                    if [ -f output/Loco/lib/app/javafx-base-17.0.2.jar ]; then rm output/Loco/lib/app/javafx-base-17.0.2.jar; fi
+                    if [ -f output/Loco/lib/app/javafx-controls-17.0.2.jar ]; then rm output/Loco/lib/app/javafx-controls-17.0.2.jar; fi
+                    if [ -f output/Loco/lib/app/javafx-fxml-17.0.2.jar ]; then rm output/Loco/lib/app/javafx-fxml-17.0.2.jar; fi
+                    if [ -f output/Loco/lib/app/javafx-graphics-17.0.2.jar ]; then rm output/Loco/lib/app/javafx-graphics-17.0.2.jar; fi
 
-                    # Compress to tar.gz
+                    # Compress
                     tar -czf loco-admin-linux.tar.gz -C output Loco
                     '''
                 }
