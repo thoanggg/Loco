@@ -57,6 +57,7 @@ pipeline {
                              --main-jar loco-1.0-SNAPSHOT.jar \
                              --main-class com.myapp.loco.Launcher \
                              --type app-image \
+                             --add-modules java.base,java.sql,java.rmi,java.management,java.logging,java.xml,java.naming,java.net.http,java.desktop,jdk.unsupported,jdk.crypto.ec,jdk.management.jfr \
                              --dest output
 
                     # Fix duplicate JavaFX jars for Linux runtime
