@@ -59,6 +59,11 @@ import javafx.beans.property.SimpleStringProperty;
 
 public class MainController {
 
+    static {
+        // Disable hostname verification globally for the HttpClient
+        System.setProperty("jdk.internal.httpclient.disableHostnameVerification", "true");
+    }
+
     private static final java.util.logging.Logger LOGGER = java.util.logging.Logger
             .getLogger(MainController.class.getName());
 
@@ -365,6 +370,8 @@ public class MainController {
             rulesView.setVisible(true);
             btnRules.getStyleClass().add("active");
         } else if (event.getSource() == btnAnalyze) {
+            if (analyzeView != null)
+                analyzeView.setVisible(true);
             if (btnAnalyze != null)
                 btnAnalyze.getStyleClass().add("active");
             updateCharts();
@@ -540,7 +547,7 @@ public class MainController {
         httpClient.sendAsync(req, HttpResponse.BodyHandlers.ofString())
                 .thenAccept(res -> Platform.runLater(() -> handlePingResponse(agent, res)))
                 .exceptionally(ex -> {
-                    Platform.runLater(() -> handlePingFailure(agent));
+                    Platform.runLater(() -> handlePingFailure(agent, ex));
                     return null;
                 });
     }
@@ -555,7 +562,8 @@ public class MainController {
         updateActiveAgentsCount();
     }
 
-    private void handlePingFailure(Agent agent) {
+    private void handlePingFailure(Agent agent, Throwable ex) {
+        LOGGER.warning("Ping failed for agent " + agent.getIp() + ": " + ex.getMessage());
         agent.setStatus(STATUS_OFFLINE);
         agentTableView.refresh();
         updateActiveAgentsCount();
@@ -1065,11 +1073,24 @@ public class MainController {
 
     private static HttpClient createInsecureHttpClient() {
         try {
-            // Use stronger protocol: TLSv1.3
-            SSLContext sc = SSLContext.getInstance("TLSv1.3");
+            // Create a trust manager that does not validate certificate chains
+            javax.net.ssl.TrustManager[] trustAllCerts = new javax.net.ssl.TrustManager[] {
+                    new javax.net.ssl.X509TrustManager() {
+                        public java.security.cert.X509Certificate[] getAcceptedIssuers() {
+                            return null;
+                        }
 
-            // Validate certificates (default TrustManager)
-            sc.init(null, null, new SecureRandom());
+                        public void checkClientTrusted(java.security.cert.X509Certificate[] certs, String authType) {
+                        }
+
+                        public void checkServerTrusted(java.security.cert.X509Certificate[] certs, String authType) {
+                        }
+                    }
+            };
+
+            // Install the all-trusting trust manager
+            SSLContext sc = SSLContext.getInstance("TLS");
+            sc.init(null, trustAllCerts, new SecureRandom());
 
             return HttpClient.newBuilder()
                     .version(HttpClient.Version.HTTP_1_1)
@@ -1079,7 +1100,7 @@ public class MainController {
         } catch (Exception e) {
             // Log error instead of printStackTrace
             java.util.logging.Logger.getLogger(MainController.class.getName())
-                    .log(java.util.logging.Level.SEVERE, "Failed to initialize secure HttpClient", e);
+                    .log(java.util.logging.Level.SEVERE, "Failed to initialize insecure HttpClient", e);
             return HttpClient.newHttpClient();
         }
     }
