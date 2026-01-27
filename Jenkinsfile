@@ -1,5 +1,10 @@
 pipeline {
-    agent any
+    agent {
+        docker {
+            image 'maven:3.9.6-eclipse-temurin-21'
+            args '--entrypoint=""' // Override maven entrypoint to allow shell commands
+        }
+    }
 
     tools {
         maven 'Maven 3'
