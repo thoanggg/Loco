@@ -11,7 +11,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.myapp.loco.sigma.SigmaRule;
 
 public class DatabaseManager {
-    private static final String DB_URL = "jdbc:sqlite:loco.db";
+    private static String dbUrl = "jdbc:sqlite:loco.db";
+
+    public static void setDbUrl(String url) {
+        dbUrl = url;
+    }
+
     private static final java.util.logging.Logger LOGGER = java.util.logging.Logger
             .getLogger(DatabaseManager.class.getName());
     private static DatabaseManager instance;
@@ -29,7 +34,7 @@ public class DatabaseManager {
     }
 
     private void initialize() {
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DriverManager.getConnection(dbUrl);
                 Statement stmt = conn.createStatement()) {
 
             // Agents Table
@@ -76,7 +81,7 @@ public class DatabaseManager {
     // --- Agents ---
     public void upsertAgent(Agent agent) {
         String sql = "INSERT OR REPLACE INTO agents(ip, name, user, status, last_seen) VALUES(?, ?, ?, ?, ?)";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DriverManager.getConnection(dbUrl);
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setString(1, agent.getIp());
             pstmt.setString(2, agent.getName());
@@ -91,7 +96,7 @@ public class DatabaseManager {
 
     public void removeAgent(String ip) {
         String sql = "DELETE FROM agents WHERE ip = ?";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DriverManager.getConnection(dbUrl);
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setString(1, ip);
             pstmt.executeUpdate();
@@ -103,7 +108,7 @@ public class DatabaseManager {
     public List<Agent> getAllAgents() {
         List<Agent> agents = new ArrayList<>();
         String sql = "SELECT name, ip, status, user, last_seen FROM agents";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DriverManager.getConnection(dbUrl);
                 Statement stmt = conn.createStatement();
                 ResultSet rs = stmt.executeQuery(sql)) {
             while (rs.next()) {
@@ -124,7 +129,7 @@ public class DatabaseManager {
     // --- Alerts ---
     public void insertAlert(LogEvent log) {
         String sql = "INSERT OR IGNORE INTO alerts(event_id, time_created, provider, level, description, user, host, full_details, event_data, alert_severity, detection_name, mitre_id, status) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DriverManager.getConnection(dbUrl);
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setString(1, log.getEventId());
             pstmt.setString(2, log.getTimeCreated());
@@ -155,7 +160,7 @@ public class DatabaseManager {
 
     public void updateAlertStatus(LogEvent log) {
         String sql = "UPDATE alerts SET status = ? WHERE event_id = ? AND time_created = ?";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DriverManager.getConnection(dbUrl);
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setString(1, log.getStatus());
             pstmt.setString(2, log.getEventId());
@@ -169,7 +174,7 @@ public class DatabaseManager {
     public List<LogEvent> getAllAlerts() {
         List<LogEvent> alerts = new ArrayList<>();
         String sql = "SELECT event_id, time_created, provider, level, description, user, host, full_details, event_data, alert_severity, detection_name, mitre_id, status FROM alerts ORDER BY time_created DESC";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DriverManager.getConnection(dbUrl);
                 Statement stmt = conn.createStatement();
                 ResultSet rs = stmt.executeQuery(sql)) {
             while (rs.next()) {
@@ -213,7 +218,7 @@ public class DatabaseManager {
     // --- Rules ---
     public void insertRule(SigmaRule rule, String yamlContent) {
         String sql = "INSERT OR REPLACE INTO rules(id, title, description, level, yaml_content) VALUES(?, ?, ?, ?, ?)";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DriverManager.getConnection(dbUrl);
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setString(1, rule.getId());
             pstmt.setString(2, rule.getTitle());
@@ -228,7 +233,7 @@ public class DatabaseManager {
 
     public void deleteRule(String id) {
         String sql = "DELETE FROM rules WHERE id = ?";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DriverManager.getConnection(dbUrl);
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setString(1, id);
             pstmt.executeUpdate();
@@ -240,7 +245,7 @@ public class DatabaseManager {
     public List<Map<String, String>> getAllRules() {
         List<Map<String, String>> rules = new ArrayList<>();
         String sql = "SELECT id, yaml_content FROM rules";
-        try (Connection conn = DriverManager.getConnection(DB_URL);
+        try (Connection conn = DriverManager.getConnection(dbUrl);
                 Statement stmt = conn.createStatement();
                 ResultSet rs = stmt.executeQuery(sql)) {
             while (rs.next()) {
