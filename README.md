@@ -98,7 +98,7 @@ flowchart TD
 ```
 
 *   **Loco Admin**: JavaFX application running on Linux. Handles visualization, rule management, and network scanning.
-*   **Loco Agent**: Lightweight Javalin server running on Windows. Exposes `wevtutil` queries via a secure REST API.
+*   **Loco Agent**: Background Windows Service (via **WinSW**) providing a secure REST API on port **9876**. specialized in collecting logs from **Application, System, Security, Sysmon, and PowerShell** channels.
 
 ---
 
@@ -112,6 +112,7 @@ flowchart TD
 | **Database** | SQLite | Serverless, zero-configuration local storage. |
 | **Parsing** | Jackson / SnakeYAML | JSON processing and Sigma Rule (YAML) interpretation. |
 | **Security** | JSSE (SSLContext) | Custom Trust Managers for self-signed certificate handling. |
+| **Packaging** | WinSW / Inno Setup | Windows Service wrapper and native .exe installer. |
 
 ---
 
@@ -134,16 +135,23 @@ cd loco
 ```
 
 ### 3. Deploy the Agent (Windows)
-Copy the shaded JAR from `loco-agent/target/loco-agent-1.0-SNAPSHOT.jar` to your Windows machine.
 
-**Manual Run:**
-```cmd
-java -jar loco-agent-1.0-SNAPSHOT.jar
-```
-*(The agent will start on port 9876 using the embedded keystore)*
+**Option A: Using Installer (Recommended)**
+1.  Download `LocoAgentInstaller.exe`.
+2.  Run as **Administrator**.
+3.  Follow the setup wizard to install the **"Loco Agent Service"**.
+4.  The agent will automatically start and runs as a background Windows Service.
 
-**Run as Service:**
-Use [WinSW](https://github.com/winsw/winsw) to wrap the JAR as a Windows Service for production deployments.
+**Option B: Manual / Developer Run**
+*   **Run as JAR**:
+    ```cmd
+    java -jar loco-agent-1.0-SNAPSHOT.jar
+    ```
+*   **Verify Health**:
+    ```bash
+    curl -k https://localhost:9876/ping
+    # Returns: pong|<username>|<hostname>
+    ```
 
 ---
 
