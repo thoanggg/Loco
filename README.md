@@ -36,11 +36,65 @@ Built with "Secure by Design" principles to protect sensitive log data:
 The system follows a distributed Client-Server model:
 
 ```mermaid
-graph LR
-    A[Loco Agent 1 (Windows)] -- "HTTPS/TLS" --> S[Loco Admin (Linux)]
-    B[Loco Agent 2 (Windows)] -- "HTTPS/TLS" --> S
-    C[Loco Agent 3 (Windows)] -- "HTTPS/TLS" --> S
-    S -- "Rules & Config" --> D[(SQLite DB)]
+flowchart TD
+    %% Define Nodes
+    Input[("Agent Log Stream
+    (JSON Payload)")]
+    Parse[("Data Normalization
+    (Jackson Parser)")]
+    
+    subgraph Engine ["Hybrid Detection Engine"]
+        direction TB
+        
+        subgraph Static ["Heuristic Layer (Hardcoded)"]
+            T1[("Check T1003
+            (LSASS Access)")]
+            T2[("Check T1204
+            (Office Spawn)")]
+        end
+        
+        subgraph Dynamic ["Sigma Layer (Dynamic)"]
+            YAML[("Load Rules(.yml Files)")]
+            Match[("Field-Value Matching
+            (Case Insensitive)")]
+        end
+    end
+    
+    Decision{"Match Found?"}
+    WhiteList{"Is Whitelisted?"}
+    Alert[("Generate Alert Object
+    (Severity/Metadata)")]
+    DB[("Persist to SQLite")]
+    UI[("Update Admin Dashboard")]
+
+    %% Define Connections
+    Input --> Parse
+    Parse --> T1
+    Parse --> T2
+    Parse --> Match
+    YAML --> Match
+    
+    T1 --> Decision
+    T2 --> Decision
+    Match --> Decision
+    
+    Decision -- Yes --> WhiteList
+    Decision -- No --> End((Discard))
+    
+    WhiteList -- No --> Alert
+    WhiteList -- Yes --> End
+    
+    Alert --> DB
+    DB --> UI
+
+    %% Styling
+    classDef storage fill:#f9f,stroke:#333,stroke-width:2px;
+    classDef process fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
+    classDef decision fill:#fff9c4,stroke:#fbc02d,stroke-width:2px;
+    
+    class Input,DB,YAML storage;
+    class Parse,T1,T2,Match,Alert,UI process;
+    class Decision,WhiteList decision;
 ```
 
 *   **Loco Admin**: JavaFX application running on Linux. Handles visualization, rule management, and network scanning.
