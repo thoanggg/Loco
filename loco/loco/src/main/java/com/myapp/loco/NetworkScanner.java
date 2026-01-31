@@ -66,6 +66,16 @@ public class NetworkScanner {
                 if (netint.isLoopback() || !netint.isUp())
                     continue;
 
+                // Filter out virtual interfaces
+                String displayName = netint.getDisplayName().toLowerCase();
+                String name = netint.getName().toLowerCase();
+                if (displayName.contains("vmware") || displayName.contains("virtualbox")
+                        || displayName.contains("vethernet") || displayName.contains("docker")
+                        || name.contains("vmware") || name.contains("vbox") || name.contains("docker")) {
+                    LOGGER.info("Skipping virtual interface: " + netint.getDisplayName());
+                    continue;
+                }
+
                 Enumeration<InetAddress> inetAddresses = netint.getInetAddresses();
                 for (InetAddress inetAddress : Collections.list(inetAddresses)) {
                     // Chỉ lấy địa chỉ IPv4 nội bộ (Site Local)
@@ -86,8 +96,8 @@ public class NetworkScanner {
         // Fallback: Nếu không tìm thấy gì, thử thêm dải phổ biến
         if (subnets.isEmpty()) {
             subnets.add("192.168.1");
-            subnets.add("192.168.30");
-            subnets.add("10.0.0"); // Common in enterprise/cloud
+            // subnets.add("192.168.30");
+            // subnets.add("10.0.0"); // Common in enterprise/cloud
         }
         return subnets;
     }

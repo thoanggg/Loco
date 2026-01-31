@@ -738,8 +738,40 @@ public class MainController {
             if (log.isAlert()) {
                 sev = log.getAlertSeverity() != null ? log.getAlertSeverity() : "Alert";
             } else if (log.getLevel() != null && !log.getLevel().isEmpty()) {
-                sev = log.getLevel();
+                String rawLevel = log.getLevel();
+                switch (rawLevel) {
+                    case "1":
+                        sev = "Critical";
+                        break;
+                    case "2":
+                        sev = "Error";
+                        break;
+                    case "3":
+                        sev = "Warning";
+                        break;
+                    case "0":
+                    case "4":
+                        sev = "Information";
+                        break;
+                    case "5":
+                        sev = "Verbose";
+                        break;
+                    default:
+                        sev = rawLevel;
+                        break;
+                }
             }
+
+            // Normalize to Title Case (e.g. "low" -> "Low", "information" -> "Information")
+            if (sev != null && !sev.isEmpty()) {
+                sev = sev.substring(0, 1).toUpperCase() + sev.substring(1).toLowerCase();
+            }
+
+            // Exclude "clean" logs from analysis charts
+            if ("Information".equals(sev) || "Verbose".equals(sev) || "Info".equals(sev)) {
+                continue;
+            }
+
             severityCounts.put(sev, severityCounts.getOrDefault(sev, 0) + 1);
 
             // Agent

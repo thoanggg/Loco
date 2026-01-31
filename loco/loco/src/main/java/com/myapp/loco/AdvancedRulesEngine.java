@@ -298,17 +298,11 @@ public class AdvancedRulesEngine {
         }
 
         // Check for specific named selections if "condition" isn't parsed yet
-        // For MVP we just iterate all map entries in 'detection' that are Maps (except
-        // 'condition')
+        // We iterate all map entries in 'detection' that differ from 'condition'
         for (Map.Entry<String, Object> entry : detection.entrySet()) {
             if (!"condition".equals(entry.getKey()) && entry.getValue() instanceof Map) {
                 if (matchesSelection(event, (Map<?, ?>) entry.getValue())) {
-                    return true; // Simplified
-                                 // OR
-                                 // logic
-                                 // across
-                                 // named
-                                 // selections
+                    return true;
                 }
             }
         }
@@ -318,13 +312,22 @@ public class AdvancedRulesEngine {
 
     private static boolean matchesSelection(LogEvent event, java.util.Map<?, ?> selection) {
         for (java.util.Map.Entry<?, ?> entry : selection.entrySet()) {
-            String field = String.valueOf(entry.getKey());
-            String value = String.valueOf(entry.getValue());
+            String fullField = String.valueOf(entry.getKey());
+            Object ruleValueObj = entry.getValue();
+
+            // Handle modifiers (e.g., Image|endswith)
+            String field = fullField;
+            String modifier = "";
+            if (fullField.contains("|")) {
+                int pipeIndex = fullField.indexOf("|");
+                field = fullField.substring(0, pipeIndex);
+                modifier = fullField.substring(pipeIndex + 1).toLowerCase();
+            }
 
             // Resolve field value from event
             String eventValue = event.getEventData().get(field);
 
-            // Fallbacks for common fields if not directly in map (e.g. from XML attributes)
+            // Fallbacks for common fields if not directly in map
             if (eventValue == null) {
                 if ("EventID".equalsIgnoreCase(field))
                     eventValue = event.getEventId();
@@ -332,12 +335,50 @@ public class AdvancedRulesEngine {
                     eventValue = event.getProviderName();
             }
 
-            if (eventValue == null || !eventValue.toLowerCase().contains(value.toLowerCase())) {
-                return false; // AND logic: all fields in
-                              // selection must match
+            // If event doesn't have the field, it's a mismatch
+            if (eventValue == null) {
+                return false;
+            }
+
+            // Handle List values (OR logic) vs Single value
+            boolean matchFound = false;
+            if (ruleValueObj instanceof List) {
+                List<?> valueList = (List<?>) ruleValueObj;
+                for (Object item : valueList) {
+                    if (checkMatch(eventValue, String.valueOf(item), modifier)) {
+                        matchFound = true;
+                        break;
+                    }
+                }
+            } else {
+                matchFound = checkMatch(eventValue, String.valueOf(ruleValueObj), modifier);
+            }
+
+            if (!matchFound) {
+                return false; // AND logic: all fields in selection must match
             }
         }
         return true;
+    }
+
+    private static boolean checkMatch(String eventValue, String ruleValue, String modifier) {
+        if (eventValue == null) return false;
+        String ev = eventValue.toLowerCase();
+        String rv = ruleValue.toLowerCase();
+
+        switch (modifier) {
+            case "contains":
+                return ev.contains(rv);
+            case "startswith":
+                return ev.startsWith(rv);
+            case "endswith":
+                return ev.endsWith(rv);
+            default:
+                // Default behavior: contains (to be safe with paths) or exact match?
+                // Given previous code used contains, we keep it for backward compat
+                // but usually Sigma requires exact match unless wildcards are used.
+                return ev.contains(rv);
+        }
     }
 
     private static void triggerAlert(LogEvent log, String name, String severity, String mitre) {
